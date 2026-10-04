@@ -64,6 +64,7 @@ Each item notes the design work already done.
   - Per-game setting to show outpost owners outside sonar.
   - "Refresh to update" banner when the client is outdated after a deploy.
   - Planned launches show their trip length instead of a countdown.
+  - Subs show a faint trail back to their origin, clipped to your sonar (you can't have watched them outside it).
 
 ### 4.1 Unload finished and idle games from memory (small, recommended next)
 - **Problem:** `GameRuntime.games` (`apps/server/src/games/runtime.ts`) only ever grows.

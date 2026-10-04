@@ -114,6 +114,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
   let moving = false;
   const subs: { sub: Sub; at: Point; target: Point }[] = [];
   const positions = subPositions(view, scene.minute);
+  const sonarClip = sonarArea(scene);
   for (const sub of view.subs) {
     const at = positions.get(sub.id);
     const to = byId.get(sub.to);
@@ -121,6 +122,16 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
     if (scene.minute < sub.arrivesAt) moving = true;
     const selected = isSelected(scene.selection, 'sub', sub.id);
     const color = playerColor(view, sub.owner);
+    // The way it came: fainter, and only inside your sonar (you can't have
+    // seen it travel through waters you don't watch).
+    const origin = byId.get(sub.from);
+    if (origin && sonarClip) {
+      ctx.save();
+      ctx.clip(sonarClip);
+      dashedLine(ctx, screen(origin.position), screen(at), withAlpha(color, selected ? 0.5 : 0.2), selected ? 2 : 1.5, [4, 6]);
+      ctx.restore();
+    }
+    // The way ahead.
     dashedLine(ctx, screen(at), screen(to.position), withAlpha(color, selected ? 0.95 : 0.45), selected ? 2.5 : 1.5, [4, 6]);
     subs.push({ sub, at, target: to.position });
   }
@@ -166,6 +177,20 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
  * circle, which removes the inner arcs). The canvas is transparent at this
  * point, so erasing only removes our own strokes.
  */
+/** Your combined sonar coverage as a clip path (screen space), or null if you have none. */
+function sonarArea({ view, camera, viewport }: Scene): Path2D | null {
+  const owned = view.outposts.filter((o) => o.owner === view.you);
+  if (owned.length === 0) return null;
+  const radius = SONAR_RANGE * camera.scale;
+  const path = new Path2D();
+  for (const o of owned) {
+    const c = toScreen(camera, viewport, o.position);
+    path.moveTo(c.x + radius, c.y);
+    path.arc(c.x, c.y, radius, 0, Math.PI * 2);
+  }
+  return path;
+}
+
 function drawSonar(ctx: CanvasRenderingContext2D, { view, camera, viewport }: Scene): void {
   const radius = SONAR_RANGE * camera.scale;
   const centres = view.outposts.filter((o) => o.owner === view.you).map((o) => toScreen(camera, viewport, o.position));
