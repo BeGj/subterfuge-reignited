@@ -3,6 +3,10 @@ import { battleIcons } from './battle-icons';
 import {
   HORIZON_PADDING,
   MIN_HORIZON,
+  TRAVEL_MAX_MS,
+  TRAVEL_MIN_MS,
+  easeInOut,
+  travelDuration,
   outcomeFor,
   outcomeSummary,
   scheduledAt,
@@ -41,6 +45,20 @@ describe('time rounding', () => {
     expect(tickOf(319.9)).toBe(310);
     expect(tickAtOrAfter(310.1)).toBe(320);
     expect(tickAtOrAfter(320)).toBe(320);
+  });
+});
+
+describe('travel animation', () => {
+  it('takes longer for bigger jumps, within bounds', () => {
+    expect(travelDuration(0)).toBe(TRAVEL_MIN_MS);
+    expect(travelDuration(600)).toBeGreaterThan(travelDuration(60));
+    expect(travelDuration(100_000)).toBe(TRAVEL_MAX_MS);
+  });
+  it('eases from 0 to 1', () => {
+    expect(easeInOut(0)).toBe(0);
+    expect(easeInOut(0.5)).toBe(0.5);
+    expect(easeInOut(1)).toBe(1);
+    expect(easeInOut(0.1)).toBeLessThan(0.1);
   });
 });
 

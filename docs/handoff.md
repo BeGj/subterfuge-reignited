@@ -96,7 +96,8 @@ Each item notes the design work already done.
   - While scrubbed, the map and panels show the forecast, framed in yellow.
   - Orders given while scrubbed are scheduled for that time and checked against the forecast first.
   - Battle icons (green ✓, red ✕, grey ?) open a summary.
-  - The sub, pending-order and battle panels have "Jump to arrival".
+  - The sub, pending-order and battle panels have "Jump to arrival", which **animates** through time (eased, 0.5–1.8 s), as do +1h, +6h and +1d. Animation is instant when reduced motion is preferred.
+  - In a forecast, other players' leaderboard numbers stay live; the forecast only knows their visible outposts.
   - The launch form shows a live prediction ("Loses: needs about 10 more drillers").
 - **Gaps:**
   - No scrubbing into the **past**. It would need the client to keep earlier snapshots.

@@ -35,7 +35,7 @@ const HEADINGS = { win: 'Predicted win', lose: 'Predicted loss', unknown: 'Outco
         }
       </dl>
       <div class="actions">
-        <button type="button" (click)="tm.jumpTo(prediction().at)">Jump to arrival</button>
+        <button type="button" (click)="tm.travelTo(prediction().at)">Jump to arrival</button>
       </div>
       <p class="note">Based on what you can see now. Enemy moves and anything outside your sonar can change this.</p>
     </section>

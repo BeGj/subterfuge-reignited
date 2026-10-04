@@ -77,3 +77,21 @@ export function outcomeSummary(prediction: ArrivalPrediction, you: PlayerId): st
   }
   return '';
 }
+
+/** Shortest and longest "travel" animation through time, in ms. */
+export const TRAVEL_MIN_MS = 500;
+export const TRAVEL_MAX_MS = 1800;
+
+/**
+ * How long animating through `minutes` of game time takes: longer jumps take
+ * longer, but never so long that it feels like waiting.
+ */
+export function travelDuration(minutes: number): number {
+  const ms = TRAVEL_MIN_MS + Math.abs(minutes) * 0.6;
+  return Math.min(TRAVEL_MAX_MS, Math.max(TRAVEL_MIN_MS, ms));
+}
+
+/** Ease-in-out (cubic): starts and ends gently. `t` in [0, 1]. */
+export function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}

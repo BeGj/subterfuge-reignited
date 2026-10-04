@@ -15,7 +15,7 @@ import { TimeMachine } from './time-machine';
         <span class="dot" aria-hidden="true"></span>
         <span>{{ text() }} <span class="muted">({{ when() }})</span></span>
       </p>
-      <button type="button" (click)="tm.jumpTo(p.at)">Jump to arrival</button>
+      <button type="button" (click)="tm.travelTo(p.at)">Jump to arrival</button>
     }
   `,
   styles: `

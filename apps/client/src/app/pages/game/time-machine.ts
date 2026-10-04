@@ -14,7 +14,16 @@ import {
   type PendingOrder,
   type PlayerView,
 } from '@subterfuge/engine';
-import { PLAY_RATE, outcomeFor, scheduledAt, scrubHorizon, tickOf, type YourOutcome } from './time-math';
+import {
+  PLAY_RATE,
+  easeInOut,
+  outcomeFor,
+  scheduledAt,
+  scrubHorizon,
+  tickOf,
+  travelDuration,
+  type YourOutcome,
+} from './time-math';
 
 /** A predicted fight (or arrival) and which sub/order it belongs to. */
 export interface Prediction extends ArrivalPrediction {
@@ -62,7 +71,16 @@ export class TimeMachine {
     const snap = this.snapshot();
     if (!snap) return null;
     const state = this.forecastState();
-    return state ? maskUnknown(viewFor(state, snap.view.you)) : snap.view;
+    if (!state) return snap.view;
+    const forecast = maskUnknown(viewFor(state, snap.view.you));
+    // The leaderboard is public and live; a forecast only knows the other
+    // players' visible outposts, so their forecast counts would be wrong
+    // (e.g. "1 outpost"). Keep your own forecast numbers, others' live ones.
+    const live = new Map(snap.view.players.map((p) => [p.id, p]));
+    return {
+      ...forecast,
+      players: forecast.players.map((p) => (p.id === snap.view.you ? p : (live.get(p.id) ?? p))),
+    };
   });
 
   /** Your pending orders that haven't executed by the displayed time. */
@@ -106,13 +124,45 @@ export class TimeMachine {
     return this.predictions().find((p) => p.key === key);
   }
 
+  /** Shows `minute` immediately (slider drags). */
   jumpTo(minute: number): void {
     this.pause();
-    this.scrub.set(Math.min(Math.max(minute, this.liveMinute()), this.horizon()));
+    this.scrub.set(this.clamp(minute));
+  }
+
+  /**
+   * Animates the world to `minute`: subs travel and fights happen on the way
+   * (Jump to arrival, +1h, ...). Instant when the user prefers reduced motion.
+   */
+  travelTo(minute: number): void {
+    this.pause();
+    const target = this.clamp(minute);
+    const start = this.scrub() ?? this.liveMinute();
+    if (prefersReducedMotion() || target === start) {
+      this.scrub.set(target);
+      return;
+    }
+    const duration = travelDuration(target - start);
+    const t0 = performance.now();
+    this.playing.set(true);
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - t0) / duration);
+      this.scrub.set(start + (target - start) * easeInOut(t));
+      if (t < 1) {
+        this.frame = requestAnimationFrame(frame);
+      } else {
+        this.playing.set(false);
+      }
+    };
+    this.frame = requestAnimationFrame(frame);
   }
 
   step(minutes: number): void {
-    this.jumpTo((this.scrub() ?? this.liveMinute()) + minutes);
+    this.travelTo((this.scrub() ?? this.liveMinute()) + minutes);
+  }
+
+  private clamp(minute: number): number {
+    return Math.min(Math.max(minute, this.liveMinute()), this.horizon());
   }
 
   backToNow(): void {
@@ -203,4 +253,8 @@ export function maskUnknown(view: PlayerView): PlayerView {
       return { id: o.id, name: o.name, position: o.position, visible: false, ...(o.type === 'mine' ? { type: o.type } : {}) };
     }),
   };
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

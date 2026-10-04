@@ -56,6 +56,38 @@ describe('TimeMachine', () => {
     expect(events.some((e) => e.kind === 'subLaunched' && e.from === target.id && e.at === at)).toBe(true);
   });
 
+  it("keeps other players' leaderboard numbers live in a forecast", () => {
+    const { tm } = setup();
+    tm.jumpTo(3 * 24 * 60);
+    expect(tm.view()!.players.find((p) => p.id === 'p2')?.outpostCount).toBe(5);
+  });
+
+  it('animates through time to the target, then stops', () => {
+    const { tm } = setup();
+    let now = 0;
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    const step = (ms: number) => {
+      now += ms;
+      frames.splice(0).forEach((cb) => cb(now));
+    };
+
+    tm.travelTo(600);
+    expect(tm.playing()).toBe(true);
+    step(16);
+    step(300);
+    const mid = tm.scrub()!;
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(600);
+    step(5000);
+    expect(tm.scrub()).toBe(600);
+    expect(tm.playing()).toBe(false);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it('still rejects orders that would fail at that time', () => {
     const { tm, target } = setup();
     tm.jumpTo(tm.prediction('order:1')!.at);
