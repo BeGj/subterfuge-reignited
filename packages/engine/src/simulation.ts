@@ -12,6 +12,7 @@ import { electricalOutput, factoryCycleOutput, mineDrillCost } from './economy.j
 import { distance } from './geometry.js';
 import { chargeShield, progressForCharge, shieldCharge } from './shield.js';
 import type {
+  CombatDetails,
   GameEvent,
   GameState,
   GameTime,
@@ -42,8 +43,12 @@ import type {
  *   specialists to that sub, which carries on (the official game sends a new
  *   sub home instead).
  * - Queens can't be gifted (rejected), since Princess promotion isn't built.
- * - A disabled shield keeps charging but doesn't fight. Dormant (unowned)
- *   outposts don't charge their shields and never resist capture.
+ * - Disabling a shield drops it to 0 and it doesn't charge while off;
+ *   re-enabling recharges from 0. A captured outpost's shield is switched
+ *   back on for the new owner. (The original forum/rulebook evidence is thin:
+ *   disabling exists for handing outposts over, which only works if the
+ *   charge goes to 0.) Dormant (unowned) outposts don't charge their shields
+ *   and never resist capture.
  * - Arrivals in the same tick resolve in launch order (sub id).
  * - Production is simultaneous: at each FACTORY_CYCLE every factory of a
  *   player sees the same pre-cycle driller total. If the remaining room under
@@ -236,9 +241,15 @@ function executeOrder(state: GameState, order: Order, events: GameEvent[]): void
       events.push({ kind: 'mineDrilled', at: state.time, outpost: outpost.id, player: player.id });
       return;
     }
-    case 'setShield':
-      outpostOf(state, order.outpost)!.shieldEnabled = order.enabled;
+    case 'setShield': {
+      // Disabling drops the charge to 0 and stops charging; re-enabling
+      // recharges from 0. That's what makes disabling useful for handing an
+      // outpost over (goal.md → Shields).
+      const outpost = outpostOf(state, order.outpost)!;
+      outpost.shieldEnabled = order.enabled;
+      if (!order.enabled) outpost.shieldProgress = 0;
       return;
+    }
     case 'resign':
       eliminate(state, order.player, events, 'resigned');
       return;
@@ -357,10 +368,16 @@ function resolveEncounters(state: GameState, events: GameEvent[]): void {
       { drillers: a.drillers, specialists: aSpecs.length },
       { drillers: b.drillers, specialists: bSpecs.length },
     );
+    const details: CombatDetails = {
+      sides: [
+        { player: a.owner, drillersBefore: a.drillers, drillersAfter: result.a, specialists: aSpecs.length },
+        { player: b.owner, drillersBefore: b.drillers, drillersAfter: result.b, specialists: bSpecs.length },
+      ],
+    };
     a.drillers = result.a;
     b.drillers = result.b;
     const winnerId = result.winner === 'a' ? a.owner : result.winner === 'b' ? b.owner : null;
-    events.push({ kind: 'combat', at: t, subs: [a.id, b.id], players: [a.owner, b.owner], winner: winnerId });
+    events.push({ kind: 'combat', at: t, subs: [a.id, b.id], players: [a.owner, b.owner], winner: winnerId, details });
 
     if (result.winner === 'draw') {
       sendHome(state, [...aSpecs, ...bSpecs], where, events);
@@ -403,6 +420,7 @@ function resolveArrivals(state: GameState, events: GameEvent[]): void {
     if (outpost.owner === null) {
       // Dormant outposts are taken without resistance.
       outpost.owner = sub.owner;
+      outpost.shieldEnabled = true;
       outpost.drillers += sub.drillers;
       for (const s of cargo) s.location = { outpost: outpost.id };
       events.push({ kind: 'outpostCaptured', at: t, outpost: outpost.id, from: null, to: sub.owner });
@@ -440,7 +458,15 @@ function attackOutpost(state: GameState, sub: Sub, outpost: Outpost, cargo: Spec
   outpost.shieldProgress = Math.max(0, outpost.shieldProgress - progressForCharge(shield - result.defenderShield));
 
   const winnerId = result.winner === 'attacker' ? sub.owner : defender;
-  events.push({ kind: 'combat', at: t, outpost: outpost.id, subs: [sub.id], players: [sub.owner, defender], winner: winnerId });
+  const details: CombatDetails = {
+    sides: [
+      { player: sub.owner, drillersBefore: sub.drillers, drillersAfter: result.attackerDrillers, specialists: attackers.length },
+      { player: defender, drillersBefore: outpost.drillers, drillersAfter: result.defenderDrillers, specialists: defenders.length },
+    ],
+    shieldBefore: shield,
+    shieldAfter: result.defenderShield,
+  };
+  events.push({ kind: 'combat', at: t, outpost: outpost.id, subs: [sub.id], players: [sub.owner, defender], winner: winnerId, details });
 
   if (result.winner === 'defender') {
     outpost.drillers = result.defenderDrillers;
@@ -449,6 +475,8 @@ function attackOutpost(state: GameState, sub: Sub, outpost: Outpost, cargo: Spec
   }
 
   outpost.owner = sub.owner;
+  // The shield setting belongs to the owner: a captured outpost's shield is on.
+  outpost.shieldEnabled = true;
   outpost.drillers = result.attackerDrillers;
   for (const s of cargo) s.location = { outpost: outpost.id };
   // Prisoners held here change hands: the attacker's own are freed.
@@ -504,8 +532,11 @@ function chargeShieldsAndMine(state: GameState): void {
   const owned = new Map<PlayerId, { outposts: number; mines: number }>();
   for (const outpost of state.outposts) {
     if (outpost.owner === null) continue;
-    const max = outpost.shieldMax + (queenAt.has(`${outpost.id}|${outpost.owner}`) ? QUEEN_SHIELD_BONUS : 0);
-    outpost.shieldProgress = chargeShield(outpost.shieldProgress, max, TICK);
+    // A disabled shield stays at 0 (see setShield).
+    if (outpost.shieldEnabled) {
+      const max = outpost.shieldMax + (queenAt.has(`${outpost.id}|${outpost.owner}`) ? QUEEN_SHIELD_BONUS : 0);
+      outpost.shieldProgress = chargeShield(outpost.shieldProgress, max, TICK);
+    }
     const count = owned.get(outpost.owner) ?? { outposts: 0, mines: 0 };
     count.outposts++;
     if (outpost.type === 'mine') count.mines++;

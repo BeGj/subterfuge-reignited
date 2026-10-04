@@ -12,6 +12,8 @@ The engine holds the game rules as pure, deterministic functions. The server run
 | `travelTime(state, from, to)` | `simulation.ts` | Travel time between two outposts at 1.0 speed, rounded up to whole ticks |
 | `subPosition(state, sub, time)` | `simulation.ts` | Where a sub is at a given time, interpolated along its route |
 | `viewFor(state, player)` | `visibility.ts` | Cuts the state down to what one player may see (fog of war) |
+| `stateFromView(view)`, `forecast(view, orders, until)` | `forecast.ts` | The time machine's simulated future, built only from what one player can see |
+| `predictArrivals(view, orders)` | `forecast.ts` | For each visible sub and pending launch: arrival time and predicted outcome (`win`, `lose`, `safe`, `unknown`) with battle numbers |
 | `resolveOutpostCombat`, `resolveSubCombat` | `combat.ts` | The combat phases |
 | `electricalOutput`, `factoryCycleOutput`, `mineDrillCost`, `neptuniumPerDay` | `economy.ts` | Production and mining maths |
 
@@ -35,6 +37,16 @@ The server and every browser must compute identical results from the same inputs
 - **No clock.** Time is always passed in.
 - **No `Math.hypot`** and other functions whose rounding isn't fully specified. Use `distance()` in `geometry.ts`, which uses `Math.sqrt`.
 - **Ids come from counters** in the state (`nextId`), so a replay produces identical ids.
+
+## Forecasts (time machine)
+
+The client predicts the future by running the same engine on the player's **own view** plus their pending orders (`forecast.ts`). Like the original game, it only knows what the player knows:
+- Hidden outposts become empty placeholders owned by `UNKNOWN_PLAYER` (`'?'`). That placeholder is marked eliminated so it never mines or wins.
+- Fights against hidden outposts are predicted as `unknown`, not as wins.
+- Enemy subs outside sonar and enemy future orders don't exist in a forecast.
+- Shield charge is rounded down to whole units, because clients don't get fractional progress.
+
+Combat events carry `details` (each side's drillers before and after, specialists, shield before and after), which the battle summaries show.
 
 ## Map generation
 
@@ -97,7 +109,7 @@ The replay test (`replay.test.ts`) checks that one `advance` call, tick-by-tick 
 - **Inactivity:** auto-resign after 48 hours (`INACTIVITY_AUTO_RESIGN`) is **not implemented**. It's based on real time, so the server would need to track real activity. Players can resign manually.
 - A resigned player's Queen stays where she is and still adds +20 shield there (eliminated players' shields keep charging, per the rules).
 - Queens can't be gifted, because Princess promotion isn't built yet.
-- A disabled shield keeps charging but doesn't fight.
+- **Disabled shields** drop to 0 and don't charge while off; re-enabling recharges from 0. A captured outpost's shield is switched back on for the new owner. The official sources only say disabling is "useful when trading or gifting outposts", which only works if the charge goes to 0; a surviving forum post agrees (rules v2).
 - Dormant outposts never charge their shields and never resist capture.
 - **Specialists:** only the Queen exists so far (+20 shield where she is; losing her eliminates you). Specialists only matter in combat as tie-breakers.
 - **Not implemented yet:** hiring and promoting specialists, funding, the domination mode, and individual specialist capture or loss events.

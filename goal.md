@@ -59,7 +59,7 @@ All outposts have a "regenerating shield".
   - ⚠️ The official sources disagree on this ratio. The wiki outpost page says 10-shield outposts are more common, which matches our 1/3 choice. A developer quote on the wiki says the shield deck is 33% weak (10) and 67% strong (20). Treat the ratio as a tunable constant.
 - Shields take **48 hours to charge from 0 to full, whatever the max**. A 20-shield outpost therefore gains ~0.42/h and a 10-shield outpost ~0.21/h.
 - All shields **start the game at 0**.
-- The owner can **turn the shield off** and back on. This is useful when trading or gifting an outpost.
+- The owner can **turn the shield off** and back on. This is useful when trading or gifting an outpost. *Our implementation:* turning it off drops the charge to 0 and stops charging; turning it on recharges from 0 (see `docs/engine.md`).
 - In combat, the shield destroys attacking drillers one-for-one and loses that much charge (see Combat).
 
 ### Subs (movement)

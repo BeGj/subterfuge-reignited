@@ -1,9 +1,10 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import type { PendingOrder, PlayerView } from '@subterfuge/engine';
 import { Realtime } from '../../../core/realtime';
 import { describePending, namesFor } from '../describe';
+import { isSelected, type Selection } from '../selection';
 
-/** Your orders that haven't executed yet, with cancel buttons. */
+/** Your orders that haven't executed yet: select one to see or edit it on the map, or cancel it. */
 @Component({
   selector: 'sub-orders-panel',
   template: `
@@ -12,7 +13,9 @@ import { describePending, namesFor } from '../describe';
       <ul>
         @for (p of items(); track p.id) {
           <li>
-            <span>{{ p.text }}</span>
+            <button type="button" class="item" [attr.aria-pressed]="p.selected" (click)="select.emit(p.id)">
+              {{ p.text }}
+            </button>
             <button type="button" [disabled]="busy()" (click)="cancel(p.id)" [attr.aria-label]="'Cancel: ' + p.text">
               Cancel
             </button>
@@ -45,6 +48,15 @@ import { describePending, namesFor } from '../describe';
       flex: none;
       padding: 4px 10px;
     }
+    li button.item {
+      flex: 1;
+      text-align: left;
+      background: none;
+      border-color: transparent;
+    }
+    li button.item[aria-pressed='true'] {
+      border-color: var(--accent);
+    }
     .muted {
       color: var(--muted);
     }
@@ -62,13 +74,20 @@ export class OrdersPanel {
   readonly view = input.required<PlayerView>();
   readonly pending = input.required<PendingOrder[]>();
   readonly minute = input.required<number>();
+  readonly selection = input<Selection | null>(null);
+  /** An order was chosen (its id). */
+  readonly select = output<string>();
 
   protected readonly busy = signal(false);
   protected readonly error = signal('');
 
   protected readonly items = computed(() => {
     const names = namesFor(this.view());
-    return this.pending().map((p) => ({ id: p.id, text: describePending(p, names, this.minute()) }));
+    return this.pending().map((p) => ({
+      id: p.id,
+      text: describePending(p, names, this.minute()),
+      selected: isSelected(this.selection(), 'order', p.id),
+    }));
   });
 
   protected async cancel(orderId: string): Promise<void> {

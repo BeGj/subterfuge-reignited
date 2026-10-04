@@ -4,6 +4,22 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — Time machine runs the engine on the player's own view
+**Decision:**
+- The client builds a forecast from its `PlayerView` (`stateFromView`) and runs `advance` forward with its pending orders.
+- While scrubbing forward, the forecast is advanced step by step from the last computed tick. It's rebuilt when the view or the orders change.
+- Orders issued while scrubbed are sent with `at` = the scrubbed tick (never earlier than the server allows), and are checked against the forecast with `validateOrder` first.
+**Why:**
+- It's the original game's behaviour ("the simulated future only takes into account what you know").
+- It needs no server support beyond scheduled orders, which already existed.
+- It can't leak hidden information, because the input is already fog-filtered.
+**Consequence:** predictions can be wrong when enemies act or when things are hidden. The UI says so, and fights against hidden outposts show as unknown.
+
+### 2026-10-04 — Disabling a shield drains it (rules v2)
+**Decision:** turning a shield off sets its charge to 0 and stops charging; turning it on recharges from 0. A captured outpost's shield is switched on for the new owner. `RULES_VERSION` went to 2.
+**Why:** playtest feedback: "I disabled a shield, but it still said 2/10". The original forums are offline. The rulebook says disabling exists for trading or gifting outposts, which only makes sense if the charge goes to 0, and a surviving forum snippet describes the shield staying down until re-enabled. Previously a disabled shield kept charging and only stopped fighting, which looked broken.
+**Consequence:** games started under rules v1 are ended on the next server start (by design, see rules versioning).
+
 ### 2026-10-04 — Rules versioning: games end instead of replaying under new rules
 **Decision:**
 - The engine has `RULES_VERSION`, and every game stores the version it started under (`games.rules_version`, migration 003).

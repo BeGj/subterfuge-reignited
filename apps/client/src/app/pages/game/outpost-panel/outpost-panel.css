@@ -3,6 +3,29 @@ h2 {
   font-size: 1.05rem;
 }
 
+h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.incoming {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.incoming li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+
+.incoming button.link {
+  padding: 0;
+  text-align: left;
+}
+
 dl {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -57,4 +80,33 @@ dd {
   margin: 4px 0 0;
   font-size: 0.85rem;
   color: var(--danger);
+}
+
+.scheduled {
+  margin: 8px 0;
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
+.prediction {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.prediction .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.prediction.win .dot {
+  background: var(--ok);
+}
+
+.prediction.lose .dot {
+  background: var(--danger);
 }

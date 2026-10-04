@@ -10,17 +10,26 @@ import { GameMap } from './game-map/game-map';
 import { OrdersPanel } from './orders-panel/orders-panel';
 import { OutpostPanel } from './outpost-panel/outpost-panel';
 import { StatusPanel } from './status-panel/status-panel';
+import { SubPanel } from './sub-panel/sub-panel';
+import { OrderPanel } from './order-panel/order-panel';
+import type { Selection } from './selection';
+import { BattlePanel } from './battle-panel';
+import { battleIcons } from './battle-icons';
+import { TimeBar } from './time-bar';
+import { TimeMachine } from './time-machine';
 
 /** The in-game screen: live map plus panels for the selection, orders and status. */
 @Component({
   selector: 'sub-game',
-  imports: [RouterLink, GameMap, OutpostPanel, StatusPanel, OrdersPanel, EventsPanel],
+  imports: [RouterLink, GameMap, OutpostPanel, SubPanel, OrderPanel, BattlePanel, StatusPanel, OrdersPanel, EventsPanel, TimeBar],
   templateUrl: './game.html',
   styleUrl: './game.css',
-  host: { '(document:keydown.escape)': 'cancelLaunch()' },
+  providers: [TimeMachine],
+  host: { '(document:keydown.escape)': 'onEscape()' },
 })
 export class Game {
   protected readonly realtime = inject(Realtime);
+  protected readonly tm = inject(TimeMachine);
 
   /** Game id from the route (`/games/:id`). */
   readonly id = input.required<string>();
@@ -29,24 +38,73 @@ export class Game {
   protected readonly clock = signal<ClockSync | null>(null);
   protected readonly error = signal('');
 
-  protected readonly selectedId = signal<string | null>(null);
+  protected readonly selection = signal<Selection | null>(null);
   protected readonly launchFromId = signal<string | null>(null);
   protected readonly launchTargetId = signal<string | null>(null);
+  /** Set while a pending launch's target is being re-picked on the map. */
+  protected readonly editingOrderId = signal<string | null>(null);
 
   /** Wall clock, ticking once a second for text displays. */
   private readonly now = signal(Date.now());
 
-  protected readonly view = computed(() => this.snapshot()?.view);
-  protected readonly minute = computed(() => {
+  /** Live game minute (fractional). */
+  protected readonly liveMinute = computed(() => {
     const clock = this.clock();
     return clock ? gameMinuteAt(clock, this.now()) : 0;
   });
+  /** What everything shows: the live view, or the time machine's forecast. */
+  protected readonly view = computed(() => this.tm.view() ?? undefined);
+  /** Game minute being shown (live or scrubbed), for ETAs and countdowns. */
+  protected readonly minute = computed(() => this.tm.displayMinute());
   protected readonly timeLabel = computed(() => {
-    const view = this.view();
-    return formatGameTime(view?.endedAt != null ? view.endedAt : this.minute());
+    const view = this.snapshot()?.view;
+    if (view?.endedAt != null) return formatGameTime(view.endedAt);
+    return formatGameTime(this.liveMinute());
+  });
+  /** Predicted fights still ahead of the displayed time, as map icons. */
+  protected readonly battles = computed(() => {
+    const view = this.snapshot()?.view;
+    if (!view) return [];
+    const shown = this.tm.displayMinute();
+    return battleIcons(view, this.tm.predictions().filter((p) => p.at >= shown));
+  });
+  /** Scheduled launch time while scrubbed (undefined = after the launch delay). */
+  protected readonly plannedLaunchAt = computed(() =>
+    this.tm.scheduleFor({ kind: 'launch', from: '', to: '', drillers: 0, specialists: [] }),
+  );
+  protected readonly selectedBattle = computed(() => {
+    const s = this.selection();
+    return s?.kind === 'battle' ? this.tm.prediction(s.id) : undefined;
   });
   protected readonly speedLabel = computed(() => formatSpeed(this.clock()?.speed ?? 1));
-  protected readonly selected = computed(() => this.view()?.outposts.find((o) => o.id === this.selectedId()));
+  protected readonly selectedOutpostId = computed(() => {
+    const s = this.selection();
+    return s?.kind === 'outpost' ? s.id : null;
+  });
+  protected readonly selected = computed(() => this.view()?.outposts.find((o) => o.id === this.selectedOutpostId()));
+  protected readonly selectedSub = computed(() => {
+    const s = this.selection();
+    return s?.kind === 'sub' ? this.view()?.subs.find((x) => x.id === s.id) : undefined;
+  });
+  protected readonly selectedOrder = computed(() => {
+    const s = this.selection();
+    return s?.kind === 'order' ? this.tm.pending().find((p) => p.id === s.id) : undefined;
+  });
+  /** A selection that no longer exists (sub arrived, order executed). */
+  protected readonly selectionGone = computed(() => {
+    const s = this.selection();
+    if (!s) return false;
+    switch (s.kind) {
+      case 'outpost':
+        return !this.selected();
+      case 'sub':
+        return !this.selectedSub();
+      case 'order':
+        return !this.selectedOrder();
+      case 'battle':
+        return !this.selectedBattle();
+    }
+  });
   protected readonly winnerText = computed(() => {
     const view = this.view();
     if (view?.endedAt == null) return '';
@@ -65,6 +123,7 @@ export class Game {
   protected readonly resignError = signal('');
 
   constructor() {
+    this.tm.bind(this.snapshot, this.liveMinute);
     const timer = setInterval(() => this.now.set(Date.now()), 1000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
 
@@ -89,23 +148,37 @@ export class Game {
     });
   }
 
-  protected onMapClick(outpostId: string | null): void {
+  protected onMapPick(target: Selection | null): void {
     const from = this.launchFromId();
     if (from) {
-      if (outpostId && outpostId !== from) this.launchTargetId.set(outpostId);
+      // Picking a launch target (new launch, or re-targeting a pending one).
+      if (target?.kind === 'outpost' && target.id !== from) this.launchTargetId.set(target.id);
       return;
     }
-    this.selectedId.set(outpostId);
+    this.selection.set(target);
   }
 
-  protected selectOutpost(outpostId: string): void {
+  protected select(target: Selection): void {
     this.cancelLaunch();
-    this.selectedId.set(outpostId);
+    this.selection.set(target);
   }
 
   protected startLaunch(): void {
-    this.launchFromId.set(this.selectedId());
+    this.launchFromId.set(this.selectedOutpostId());
     this.launchTargetId.set(null);
+  }
+
+  /** Re-pick the target of a pending launch on the map. */
+  protected startRetarget(from: string): void {
+    this.editingOrderId.set(this.selection()?.id ?? null);
+    this.launchFromId.set(from);
+    this.launchTargetId.set(null);
+  }
+
+  /** After an edit the order has a new id (it was cancelled and re-issued). */
+  protected orderReplaced(orderId: string): void {
+    this.cancelLaunch();
+    this.selection.set({ kind: 'order', id: orderId });
   }
 
   protected async resign(): Promise<void> {
@@ -118,8 +191,15 @@ export class Game {
     }
   }
 
+  /** Esc: leave launch mode first, then leave the forecast. */
+  protected onEscape(): void {
+    if (this.launchFromId()) this.cancelLaunch();
+    else if (this.tm.active()) this.tm.backToNow();
+  }
+
   protected cancelLaunch(): void {
     this.launchFromId.set(null);
     this.launchTargetId.set(null);
+    this.editingOrderId.set(null);
   }
 }

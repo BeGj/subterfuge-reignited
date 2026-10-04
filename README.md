@@ -69,5 +69,6 @@ goal.md            The game rules we're implementing, with sources
 - [x] Game runtime: replay from orders, live updates, order and cancel API
 - [x] Game screen: canvas map, outpost panel, launch / drill / shield orders, pending orders, players, events
 - [ ] Specialists (hiring, promotion, abilities; only the Queen exists so far)
-- [ ] Time machine
+- [x] Time machine: scrub into a forecast, play it, schedule orders at that time, win/lose battle predictions, jump to arrival
+- [x] Map UX from playtest: one sonar area, selectable subs with ETA, pending orders on the map (edit/cancel), ambient background
 - [ ] Chat

@@ -12,21 +12,32 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import type { PlayerView, Point } from '@subterfuge/engine';
-import { fitPoints, pan, toMap, zoomAt, type Camera, type Viewport } from '../camera';
+import type { PendingOrder, PlayerView, Point } from '@subterfuge/engine';
+import { fitPoints, pan, toScreen, zoomAt, type Camera, type Viewport } from '../camera';
 import { gameMinuteAt, type ClockSync } from '../clock';
-import { hitTestOutpost } from '../geometry';
-import { drawScene } from '../map-renderer';
+import { pick, type Hittable } from '../geometry';
+import { drawScene, subPositions } from '../map-renderer';
+import { badgeCenter, orderMarkers } from '../overlays';
+import { ICON_RADIUS, drawBattleIcons, iconCenter, type BattleIcon } from '../battle-icons';
+import { sameSelection, type Selection } from '../selection';
 
 /** Pixels the pointer may move before a press counts as a drag, not a click. */
 const DRAG_THRESHOLD = 4;
-/** Click tolerance around an outpost, in screen pixels. */
+/** Click tolerance around targets, in screen pixels. */
 const HIT_RADIUS_PX = 16;
+/** Ghost routes are thin, so they need a tighter tolerance than points. */
+const ROUTE_HIT_PX = 6;
 
 /**
  * Canvas map of the game. Draws `view` (outposts, sonar, subs moving in real
- * time), supports drag-to-pan and wheel/button zoom, and reports clicks on
- * outposts. Redraws only when something changed or subs are moving.
+ * time, your pending orders), supports drag-to-pan and wheel/button zoom, and
+ * reports what was clicked. Redraws only when something changed or subs are
+ * moving.
+ *
+ * Click priority when targets overlap: battle icons, order badges, then subs,
+ * then outposts, then ghost routes. Subs sit on top of outposts while leaving or
+ * arriving, and outposts stay reachable from the sidebar list, so the
+ * smaller, moving target wins.
  */
 @Component({
   selector: 'sub-game-map',
@@ -35,7 +46,7 @@ const HIT_RADIUS_PX = 16;
       #canvas
       role="img"
       [attr.aria-label]="summary()"
-      [style.cursor]="hoverId() ? 'pointer' : dragging() ? 'grabbing' : 'grab'"
+      [style.cursor]="hover() ? 'pointer' : dragging() ? 'grabbing' : 'grab'"
     ></canvas>
     <div class="controls">
       <button type="button" (click)="zoomBy(1.4)" aria-label="Zoom in">+</button>
@@ -47,15 +58,54 @@ const HIT_RADIUS_PX = 16;
     }
   `,
   styles: `
+    /* Deep-sea ambience behind the transparent canvas: layered glows plus
+       slowly drifting caustic light. CSS only, so it never forces a canvas
+       redraw; frozen for prefers-reduced-motion. */
     :host {
       position: relative;
       display: block;
       overflow: hidden;
       min-height: 320px;
       touch-action: none;
+      background:
+        radial-gradient(ellipse 70% 55% at 20% 15%, rgb(31 94 120 / 0.35), transparent 70%),
+        radial-gradient(ellipse 60% 50% at 85% 80%, rgb(20 60 110 / 0.35), transparent 70%),
+        radial-gradient(ellipse 90% 70% at 50% 110%, rgb(2 8 16 / 0.9), transparent 70%),
+        linear-gradient(180deg, #0a1d2c 0%, #061220 60%, #040c16 100%);
+    }
+    :host::before,
+    :host::after {
+      content: '';
+      position: absolute;
+      inset: -20%;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 30% 40%, rgb(120 220 230 / 0.05) 0 8%, transparent 9%),
+        radial-gradient(circle at 70% 30%, rgb(120 220 230 / 0.04) 0 6%, transparent 7%),
+        radial-gradient(circle at 55% 75%, rgb(120 220 230 / 0.05) 0 10%, transparent 11%);
+      background-size: 420px 380px;
+      filter: blur(18px);
+      animation: drift 60s linear infinite alternate;
+    }
+    :host::after {
+      background-size: 300px 340px;
+      animation-duration: 85s;
+      animation-direction: alternate-reverse;
+      opacity: 0.8;
+    }
+    @keyframes drift {
+      from { transform: translate3d(0, 0, 0); }
+      to { transform: translate3d(6%, 4%, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :host::before,
+      :host::after {
+        animation: none;
+      }
     }
     canvas {
       position: absolute;
+      z-index: 1;
       inset: 0;
       width: 100%;
       height: 100%;
@@ -63,6 +113,7 @@ const HIT_RADIUS_PX = 16;
     }
     .controls {
       position: absolute;
+      z-index: 2;
       right: 12px;
       top: 12px;
       display: flex;
@@ -77,8 +128,11 @@ const HIT_RADIUS_PX = 16;
     }
     .hint {
       position: absolute;
+      z-index: 2;
       left: 50%;
-      bottom: 12px;
+      /* Top, not bottom: the bottom edge is where you aim at targets near the time bar. */
+      top: 12px;
+      pointer-events: none;
       transform: translateX(-50%);
       margin: 0;
       padding: 6px 12px;
@@ -92,17 +146,24 @@ const HIT_RADIUS_PX = 16;
 export class GameMap {
   readonly view = input.required<PlayerView>();
   readonly clock = input.required<ClockSync>();
-  readonly selectedId = input<string | null>(null);
+  readonly selection = input<Selection | null>(null);
+  readonly pending = input<readonly PendingOrder[]>([]);
   readonly launchFromId = input<string | null>(null);
   readonly launchTargetId = input<string | null>(null);
+  /** Predicted fights to mark on the map. */
+  readonly battles = input<readonly BattleIcon[]>([]);
+  /** Show this game minute instead of the live clock (time machine). */
+  readonly fixedMinute = input<number | null>(null);
+  /** When a planned launch would leave, if not "after the launch delay". */
+  readonly launchAt = input<number | undefined>(undefined);
 
-  /** An outpost was clicked (or `null` for empty water). */
-  readonly outpostClick = output<string | null>();
+  /** Something was clicked (or `null` for empty water). */
+  readonly pick = output<Selection | null>();
 
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
-  protected readonly hoverId = signal<string | null>(null);
+  protected readonly hover = signal<Selection | null>(null, { equal: sameSelection });
   protected readonly dragging = signal(false);
   private readonly camera = signal<Camera | null>(null);
   private readonly viewport = signal<Viewport>({ width: 0, height: 0 });
@@ -153,10 +214,14 @@ export class GameMap {
       this.clock();
       this.camera();
       this.viewport();
-      this.selectedId();
+      this.selection();
+      this.pending();
       this.launchFromId();
       this.launchTargetId();
-      this.hoverId();
+      this.battles();
+      this.fixedMinute();
+      this.launchAt();
+      this.hover();
       this.requestDraw();
     });
   }
@@ -200,18 +265,25 @@ export class GameMap {
       const ctx = this.canvas().nativeElement.getContext('2d');
       if (!camera || !ctx) return;
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      const fixed = this.fixedMinute();
+      const minute = fixed ?? gameMinuteAt(this.clock(), Date.now());
       const moving = drawScene(ctx, {
         view: this.view(),
         camera,
         viewport: this.viewport(),
-        minute: gameMinuteAt(this.clock(), Date.now()),
-        selectedId: this.selectedId(),
-        hoverId: this.hoverId(),
+        minute,
+        selection: this.selection(),
+        hover: this.hover(),
         launchFromId: this.launchFromId(),
         launchTargetId: this.launchTargetId(),
+        launchAt: this.launchAt(),
+        markers: orderMarkers(this.view(), this.pending(), minute),
       });
-      // Keep animating while subs are travelling.
-      if (moving) this.requestDraw();
+      const selection = this.selection();
+      drawBattleIcons(ctx, this.battles(), camera, this.viewport(), selection?.kind === 'battle' ? selection.id : null);
+      // Keep animating while subs are travelling (the time machine drives
+      // its own redraws through `fixedMinute`).
+      if (moving && fixed === null) this.requestDraw();
     });
   }
 
@@ -220,11 +292,43 @@ export class GameMap {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  private outpostAt(screenPoint: Point): string | null {
+  /** What's under a screen point, in click-priority order (see class doc). */
+  private targetAt(screenPoint: Point): Selection | null {
     const camera = this.camera();
     if (!camera) return null;
-    const mapPoint = toMap(camera, this.viewport(), screenPoint);
-    return hitTestOutpost(this.view().outposts, mapPoint, HIT_RADIUS_PX / camera.scale)?.id ?? null;
+    const viewport = this.viewport();
+    const view = this.view();
+    const screen = (p: Point) => toScreen(camera, viewport, p);
+    const outposts: Hittable<Selection>[] = view.outposts.map((o) => ({ value: { kind: 'outpost', id: o.id }, at: screen(o.position) }));
+    // While picking a launch target only outposts matter.
+    if (this.launchFromId()) return pick([outposts], screenPoint, HIT_RADIUS_PX) ?? null;
+
+    const minute = this.fixedMinute() ?? gameMinuteAt(this.clock(), Date.now());
+    const markers = orderMarkers(view, this.pending(), minute);
+    const battles: Hittable<Selection>[] = this.battles().map((b) => ({
+      value: { kind: 'battle', id: b.key },
+      at: iconCenter(b, camera, viewport),
+    }));
+    const stacked = new Map<string, number>();
+    const badges: Hittable<Selection>[] = markers.map((m) => {
+      const key = `${m.kind}:${m.anchor.x},${m.anchor.y}`;
+      const index = stacked.get(key) ?? 0;
+      stacked.set(key, index + 1);
+      return { value: { kind: 'order', id: m.orderId }, at: badgeCenter(m, camera, viewport, index) };
+    });
+    const subs: Hittable<Selection>[] = [...subPositions(view, minute)].map(([id, at]) => ({
+      value: { kind: 'sub', id },
+      at: screen(at),
+    }));
+    const routes: Hittable<Selection>[] = markers
+      .filter((m) => m.target)
+      .map((m) => ({ value: { kind: 'order', id: m.orderId }, from: screen(m.anchor), to: screen(m.target!) }));
+    return (
+      pick([battles], screenPoint, ICON_RADIUS + 4) ??
+      pick([badges, subs, outposts], screenPoint, HIT_RADIUS_PX) ??
+      pick([routes], screenPoint, ROUTE_HIT_PX) ??
+      null
+    );
   }
 
   private attachPointer(canvas: HTMLCanvasElement): void {
@@ -251,10 +355,10 @@ export class GameMap {
         last = p;
         return;
       }
-      this.hoverId.set(this.outpostAt(p));
+      this.hover.set(this.targetAt(p));
     });
     const end = (e: PointerEvent, click: boolean) => {
-      if (click && start && !moved) this.outpostClick.emit(this.outpostAt(this.localPoint(e)));
+      if (click && start && !moved) this.pick.emit(this.targetAt(this.localPoint(e)));
       start = last = null;
       moved = false;
       this.dragging.set(false);
@@ -262,7 +366,7 @@ export class GameMap {
     canvas.addEventListener('pointerup', (e) => end(e, true));
     canvas.addEventListener('pointercancel', (e) => end(e, false));
     canvas.addEventListener('pointerleave', () => {
-      if (!start) this.hoverId.set(null);
+      if (!start) this.hover.set(null);
     });
   }
 }

@@ -28,12 +28,25 @@
   <ul class="outposts" aria-labelledby="your-outposts">
     @for (o of myOutposts(); track o.id) {
       <li>
-        <button type="button" [attr.aria-pressed]="o.id === selectedId()" (click)="select.emit(o.id)">
+        <button type="button" [attr.aria-pressed]="o.selected" (click)="select.emit({ kind: 'outpost', id: o.id })">
           {{ o.name }} · {{ o.drillers }}
         </button>
       </li>
     } @empty {
       <li class="muted">None</li>
+    }
+  </ul>
+
+  <h2 id="your-subs" class="subs-title">Your subs</h2>
+  <ul class="subs" aria-labelledby="your-subs">
+    @for (s of mySubs(); track s.id) {
+      <li>
+        <button type="button" [attr.aria-pressed]="s.selected" (click)="select.emit({ kind: 'sub', id: s.id })">
+          {{ s.text }}
+        </button>
+      </li>
+    } @empty {
+      <li class="muted">None in flight</li>
     }
   </ul>
 </section>

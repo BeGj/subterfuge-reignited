@@ -162,12 +162,30 @@ export type GameEvent =
       subs: SubId[];
       players: PlayerId[];
       winner: PlayerId | null;
+      /** The numbers behind the result, for battle summaries. */
+      details: CombatDetails;
     }
   | { kind: 'mineDrilled'; at: GameTime; outpost: OutpostId; player: PlayerId }
   | { kind: 'playerEliminated'; at: GameTime; player: PlayerId; reason: 'queenCaptured' | 'resigned' }
   | { kind: 'gameWon'; at: GameTime; player: PlayerId; reason: 'neptunium' | 'lastStanding' }
   /** Everyone still in the game was eliminated in the same tick. */
   | { kind: 'gameDrawn'; at: GameTime };
+
+/** One side of a combat, before and after. Same order as `players`. */
+export interface CombatSide {
+  player: PlayerId;
+  drillersBefore: number;
+  drillersAfter: number;
+  /** Active (non-captive) specialists taking part. */
+  specialists: number;
+}
+
+export interface CombatDetails {
+  sides: CombatSide[];
+  /** Defending outpost's shield charge before/after (outpost combat only). */
+  shieldBefore?: number;
+  shieldAfter?: number;
+}
 
 // --- Player view (fog of war) --------------------------------------------
 

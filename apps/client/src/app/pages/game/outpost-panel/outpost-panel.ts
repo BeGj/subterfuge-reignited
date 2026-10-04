@@ -3,8 +3,11 @@ import { FormField, form, max, min, submit } from '@angular/forms/signals';
 import { mineDrillCost, type OrderInput, type OutpostView, type PlayerView } from '@subterfuge/engine';
 import { Realtime } from '../../../core/realtime';
 import { namesFor } from '../describe';
-import { formatDuration } from '../format';
+import { formatDuration, formatGameTime } from '../format';
 import { travelMinutes } from '../geometry';
+import { estimatedLaunchAt } from '../overlays';
+import { TimeMachine } from '../time-machine';
+import { outcomeFor, outcomeSummary } from '../time-math';
 
 const TYPE_LABELS: Record<string, string> = { factory: 'Factory', generator: 'Generator', mine: 'Mine' };
 
@@ -20,16 +23,21 @@ const TYPE_LABELS: Record<string, string> = { factory: 'Factory', generator: 'Ge
 })
 export class OutpostPanel {
   private readonly realtime = inject(Realtime);
+  protected readonly tm = inject(TimeMachine);
 
   readonly gameId = input.required<string>();
   readonly view = input.required<PlayerView>();
   readonly outpost = input.required<OutpostView>();
+  /** Current game minute (fractional), for ETAs. */
+  readonly minute = input.required<number>();
   /** Target chosen on the map while launching. */
   readonly launchTargetId = input<string | null>(null);
   readonly launching = input(false);
 
   readonly launchStart = output<void>();
   readonly launchCancel = output<void>();
+  /** A sub in the "incoming" list was chosen. */
+  readonly selectSub = output<string>();
 
   protected readonly error = signal('');
   protected readonly busy = signal(false);
@@ -63,9 +71,52 @@ export class OutpostPanel {
   });
 
   protected readonly target = computed(() => this.view().outposts.find((o) => o.id === this.launchTargetId()));
+  /** When a launch sent now would leave: the scrubbed time, or after the launch delay. */
+  private readonly launchAt = computed(() => {
+    const target = this.target();
+    const scheduled = target
+      ? this.tm.scheduleFor({ kind: 'launch', from: this.outpost().id, to: target.id, drillers: 0, specialists: [] })
+      : undefined;
+    return scheduled ?? estimatedLaunchAt(this.minute());
+  });
+  /** "arrives in 11h 50m · Day 2, 03:40", counting the launch delay. */
   protected readonly travel = computed(() => {
     const target = this.target();
-    return target ? formatDuration(travelMinutes(this.outpost().position, target.position)) : '';
+    if (!target) return '';
+    const arrival = this.launchAt() + travelMinutes(this.outpost().position, target.position);
+    return `${formatDuration(arrival - this.minute())} · ${formatGameTime(arrival)}`;
+  });
+  /** Shown while scrubbed into the future: orders become scheduled. */
+  protected readonly scheduledLabel = computed(() => (this.tm.active() ? formatGameTime(this.launchAt()) : ''));
+
+  /** Live prediction for the launch being composed. */
+  protected readonly draft = computed(() => {
+    const target = this.target();
+    if (!target) return null;
+    const { drillers, specialists } = this.launchModel();
+    const chosen = specialists.filter((s) => s.selected).map((s) => s.id);
+    if (drillers <= 0 && chosen.length === 0) return null;
+    const prediction = this.tm.predictDraft(
+      { kind: 'launch', from: this.outpost().id, to: target.id, drillers, specialists: chosen },
+      this.launchAt(),
+    );
+    if (!prediction) return null;
+    const you = this.view().you;
+    return { outcome: outcomeFor(prediction, you), text: outcomeSummary(prediction, you) };
+  });
+
+  /** Subs you can see heading here (yours and others'), soonest first. */
+  protected readonly incoming = computed(() => {
+    const names = this.names();
+    return this.view()
+      .subs.filter((s) => s.to === this.outpost().id)
+      .sort((a, b) => a.arrivesAt - b.arrivesAt)
+      .map((s) => ({
+        id: s.id,
+        text: `${names.player(s.owner)}: ${s.drillers} drillers${s.specialists.length ? ` + ${s.specialists.length} specialist(s)` : ''}`,
+        eta: `${formatDuration(s.arrivesAt - this.minute())} · ${formatGameTime(s.arrivesAt)}`,
+        mine: s.owner === this.view().you,
+      }));
   });
 
   /**
@@ -119,9 +170,17 @@ export class OutpostPanel {
 
   private async send(order: OrderInput): Promise<boolean> {
     this.error.set('');
+    // While scrubbed, the order is scheduled for that time; check it against
+    // the forecast first (the server only checks scheduled orders when they run).
+    const problem = this.tm.validateScheduled(order);
+    if (problem) {
+      this.error.set(`At that time: ${problem}`);
+      return false;
+    }
+    const at = this.tm.scheduleFor(order);
     this.busy.set(true);
     try {
-      await this.realtime.issueOrder({ gameId: this.gameId(), order });
+      await this.realtime.issueOrder({ gameId: this.gameId(), order, ...(at === undefined ? {} : { at }) });
       return true;
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : 'Order failed.');

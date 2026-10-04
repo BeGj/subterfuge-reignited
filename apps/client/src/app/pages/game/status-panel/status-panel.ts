@@ -2,9 +2,11 @@ import { Component, computed, input, output } from '@angular/core';
 import { NEPTUNIUM_TO_WIN, electricalOutput, type PlayerView } from '@subterfuge/engine';
 import { minutesToNextProduction } from '../clock';
 import { playerColor } from '../colors';
+import { namesFor } from '../describe';
 import { formatDuration, formatNeptunium } from '../format';
+import { isSelected, type Selection } from '../selection';
 
-/** Players' standings, your economy, and a keyboard-friendly list of your outposts. */
+/** Players' standings, your economy, and keyboard-friendly lists of your outposts and subs. */
 @Component({
   selector: 'sub-status-panel',
   templateUrl: './status-panel.html',
@@ -45,15 +47,21 @@ import { formatDuration, formatNeptunium } from '../format';
     .stats p {
       margin: 2px 0;
     }
-    .outposts {
+    .subs {
+      margin-top: 4px;
+    }
+    .outposts,
+    .subs {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
-    .outposts button {
+    .outposts button,
+    .subs button {
       padding: 4px 10px;
     }
-    .outposts button[aria-pressed='true'] {
+    .outposts button[aria-pressed='true'],
+    .subs button[aria-pressed='true'] {
       border-color: var(--accent);
     }
     .muted {
@@ -65,8 +73,8 @@ export class StatusPanel {
   readonly view = input.required<PlayerView>();
   /** Current game minute (fractional). */
   readonly minute = input.required<number>();
-  readonly selectedId = input<string | null>(null);
-  readonly select = output<string>();
+  readonly selection = input<Selection | null>(null);
+  readonly select = output<Selection>();
 
   protected readonly goal = NEPTUNIUM_TO_WIN;
 
@@ -79,7 +87,25 @@ export class StatusPanel {
     })),
   );
 
-  protected readonly myOutposts = computed(() => this.view().outposts.filter((o) => o.owner === this.view().you));
+  protected readonly myOutposts = computed(() =>
+    this.view()
+      .outposts.filter((o) => o.owner === this.view().you)
+      .map((o) => ({ ...o, selected: isSelected(this.selection(), 'outpost', o.id) })),
+  );
+
+  /** Your subs in flight, soonest arrival first. */
+  protected readonly mySubs = computed(() => {
+    const view = this.view();
+    const names = namesFor(view);
+    return view.subs
+      .filter((s) => s.owner === view.you)
+      .sort((a, b) => a.arrivesAt - b.arrivesAt)
+      .map((s) => ({
+        id: s.id,
+        text: `${s.drillers} → ${names.outpost(s.to)} · ${formatDuration(s.arrivesAt - this.minute())}`,
+        selected: isSelected(this.selection(), 'sub', s.id),
+      }));
+  });
 
   protected readonly totals = computed(() => {
     const view = this.view();

@@ -210,6 +210,12 @@ describe('advance', () => {
       subs: ['sub-1', 'sub-2'],
       players: ['p1', 'p2'],
       winner: 'p1',
+      details: {
+        sides: [
+          { player: 'p1', drillersBefore: 10, drillersAfter: 6, specialists: 0 },
+          { player: 'p2', drillersBefore: 4, drillersAfter: 0, specialists: 0 },
+        ],
+      },
     });
     expect(mid.state.subs).toHaveLength(1);
     expect(mid.state.subs[0]).toMatchObject({ id: 'sub-1', drillers: 6 });
@@ -414,5 +420,32 @@ describe('resign', () => {
     expect(state.endedAt).toBeNull();
     expect(events.filter((e) => e.at > TICK)).toEqual([]);
     expect(find(state, 'A')).toMatchObject({ drillers: 40, shieldEnabled: true });
+  });
+});
+
+describe('disabling shields', () => {
+  const setShield = (outpost: string, enabled: boolean, at = 10): Order => ({ kind: 'setShield', at, player: 'p2', outpost, enabled });
+
+  it('drops the charge to 0 when disabled and keeps it there while off', () => {
+    const { state } = advance(makeState(), [setShield('E', false)], 24 * 60);
+    expect(find(state, 'E')).toMatchObject({ shieldEnabled: false, shieldProgress: 0 });
+  });
+
+  it('recharges from 0 after being re-enabled', () => {
+    const orders = [setShield('E', false), setShield('E', true, 20)];
+    const { state } = advance(makeState(), orders, 20 + 6 * 60);
+    // E has max 8: full in 48h, so 6h after re-enabling it holds 1 charge.
+    expect(find(state, 'E').shieldEnabled).toBe(true);
+    expect(shieldCharge(find(state, 'E').shieldProgress)).toBe(1);
+  });
+
+  it('lets a small sub capture a disabled outpost (the point of disabling)', () => {
+    const { state } = advance(makeState(), [setShield('E', false), launch({ player: 'p1', from: 'A', to: 'E', drillers: 6, at: 10 })], 700);
+    expect(find(state, 'E').owner).toBe('p1');
+  });
+
+  it('switches the shield back on for the new owner after a capture', () => {
+    const { state } = advance(makeState(), [setShield('E', false), launch({ player: 'p1', from: 'A', to: 'E', drillers: 6, at: 10 })], 700);
+    expect(find(state, 'E').shieldEnabled).toBe(true);
   });
 });

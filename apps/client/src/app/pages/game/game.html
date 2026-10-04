@@ -2,6 +2,9 @@
   <a routerLink="/" class="back">← Lobby</a>
   @if (view()) {
     <span class="time" aria-live="off">{{ timeLabel() }}</span>
+    @if (tm.active()) {
+      <span class="forecast-tag">Viewing forecast</span>
+    }
     <span class="muted">{{ speedLabel() }}</span>
   }
   <span class="status" [class]="realtime.status()" role="status">{{ realtime.status() }}</span>
@@ -15,15 +18,22 @@
   </main>
 } @else if (snapshot(); as snap) {
   <div class="layout">
-    <sub-game-map
-      class="map"
-      [view]="snap.view"
-      [clock]="clock()!"
-      [selectedId]="selectedId()"
-      [launchFromId]="launchFromId()"
-      [launchTargetId]="launchTargetId()"
-      (outpostClick)="onMapClick($event)"
-    />
+    <div class="map-area" [class.forecast]="tm.active()">
+      <sub-game-map
+        class="map"
+        [view]="view()!"
+        [clock]="clock()!"
+        [selection]="selection()"
+        [pending]="tm.pending()"
+        [launchFromId]="launchFromId()"
+        [launchTargetId]="launchTargetId()"
+        [battles]="battles()"
+        [fixedMinute]="tm.scrub()"
+        [launchAt]="plannedLaunchAt()"
+        (pick)="onMapPick($event)"
+      />
+      <sub-time-bar [liveMinute]="liveMinute()" />
+    </div>
     <aside class="sidebar" aria-label="Game panels">
       @if (winnerText()) {
         <section class="card winner" role="status">
@@ -34,24 +44,56 @@
       @if (selected(); as outpost) {
         <sub-outpost-panel
           [gameId]="snap.gameId"
-          [view]="snap.view"
+          [view]="view()!"
           [outpost]="outpost"
-          [launching]="launchFromId() === outpost.id"
+          [minute]="minute()"
+          [launching]="launchFromId() === outpost.id && !editingOrderId()"
           [launchTargetId]="launchTargetId()"
           (launchStart)="startLaunch()"
           (launchCancel)="cancelLaunch()"
+          (selectSub)="select({ kind: 'sub', id: $event })"
         />
+      } @else if (selectedSub(); as sub) {
+        <sub-sub-panel [view]="view()!" [sub]="sub" [minute]="minute()" />
+      } @else if (selectedOrder(); as order) {
+        <sub-order-panel
+          [gameId]="snap.gameId"
+          [view]="view()!"
+          [pending]="order"
+          [minute]="minute()"
+          [retargeting]="editingOrderId() === order.id"
+          [newTargetId]="editingOrderId() === order.id ? launchTargetId() : null"
+          (retarget)="startRetarget($event)"
+          (retargetCancel)="cancelLaunch()"
+          (replaced)="orderReplaced($event)"
+          (cancelled)="selection.set(null)"
+        />
+      } @else if (selectedBattle(); as battle) {
+        <sub-battle-panel [view]="view()!" [prediction]="battle" [minute]="liveMinute()" />
       } @else {
-        <p class="card muted">Select an outpost on the map or in the list below.</p>
+        <p class="card muted">
+          @if (selectionGone()) {
+            That sub has arrived or that order has executed.
+          } @else {
+            Select an outpost, sub or pending order on the map, or use the lists below.
+          }
+        </p>
       }
-      <sub-orders-panel [gameId]="snap.gameId" [view]="snap.view" [pending]="snap.pendingOrders" [minute]="minute()" />
-      <sub-status-panel
-        [view]="snap.view"
+      <sub-orders-panel
+        [gameId]="snap.gameId"
+        [view]="view()!"
+        [pending]="tm.pending()"
         [minute]="minute()"
-        [selectedId]="selectedId()"
-        (select)="selectOutpost($event)"
+        [selection]="selection()"
+        (select)="select({ kind: 'order', id: $event })"
       />
-      <sub-events-panel [view]="snap.view" [events]="snap.events" />
+      <sub-status-panel
+        [view]="view()!"
+        [minute]="minute()"
+        [selection]="selection()"
+        (select)="select($event)"
+      />
+      <sub-events-panel [view]="view()!" [events]="snap.events" />
       @if (canResign()) {
         <section class="card resign" aria-labelledby="resign-title">
           <h2 id="resign-title">Leave the game</h2>

@@ -47,9 +47,30 @@ header {
   display: flex;
 }
 
-.map {
+.map-area {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Forecast mode: a warm frame so it can't be mistaken for the live game. */
+.map-area.forecast {
+  box-shadow: inset 0 0 0 3px var(--warn);
+}
+
+.map {
+  flex: 1;
+  min-height: 0;
+}
+
+.forecast-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: var(--warn);
+  color: #2a1d00;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .sidebar {
@@ -98,6 +119,10 @@ header {
 
   .layout {
     flex-direction: column;
+  }
+
+  .map-area {
+    flex: none;
   }
 
   .map {

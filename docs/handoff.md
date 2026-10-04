@@ -90,7 +90,18 @@ Each item notes the design work already done.
 - **Client:** a hire panel, specialist icons on the map, and specialist checkboxes in the launch form (they exist already for the Queen).
 - **Tip:** do this contracts-first with parallel agents (§6). Types and stubs first, then agents per specialist group, each with its own tests.
 
-### 4.4 Time machine (medium)
+### 4.4 Time machine (done; known gaps)
+- **Engine:** `forecast.ts` (`stateFromView`, `forecast`, `predictArrivals`), plus combat `details` on combat events.
+- **Client** (`pages/game/time-machine.ts`, a service provided per game page): the time bar under the map has Now, Play, +1h, +6h, +1d and a slider.
+  - While scrubbed, the map and panels show the forecast, framed in yellow.
+  - Orders given while scrubbed are scheduled for that time and checked against the forecast first.
+  - Battle icons (green ✓, red ✕, grey ?) open a summary.
+  - The sub, pending-order and battle panels have "Jump to arrival".
+  - The launch form shows a live prediction ("Loses: needs about 10 more drillers").
+- **Gaps:**
+  - No scrubbing into the **past**. It would need the client to keep earlier snapshots.
+  - Playback has a fixed rate (`PLAY_RATE`).
+  - Predictions ignore enemy plans and anything outside sonar, as the original does.
 - Server support exists: `issueOrder` accepts a future `at`, and scheduled orders appear in `pendingOrders`.
 - The client needs:
   - a time slider

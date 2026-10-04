@@ -1,0 +1,74 @@
+import { DAY, HOUR, LAUNCH_DELAY, TICK, type ArrivalPrediction, type PlayerId } from '@subterfuge/engine';
+
+/** How far the scrubber reaches at least, beyond "now". */
+export const MIN_HORIZON = 3 * DAY;
+/** Extra room past the latest predicted arrival, so you can watch it land. */
+export const HORIZON_PADDING = 6 * HOUR;
+/** Playback speed of the time machine: game minutes per real second. */
+export const PLAY_RATE = 120;
+
+/** The tick a (fractional) game minute belongs to. */
+export function tickOf(minute: number): number {
+  return Math.floor(minute / TICK) * TICK;
+}
+
+/** First tick at or after a (fractional) game minute. */
+export function tickAtOrAfter(minute: number): number {
+  return Math.ceil(minute / TICK) * TICK;
+}
+
+/** Furthest point of the scrubber: 3 game days, or past the last arrival. */
+export function scrubHorizon(liveMinute: number, predictions: readonly ArrivalPrediction[]): number {
+  const latest = predictions.reduce((max, p) => Math.max(max, p.at), 0);
+  return tickAtOrAfter(Math.max(liveMinute + MIN_HORIZON, latest + HORIZON_PADDING));
+}
+
+/**
+ * When an order issued while looking at `scrubMinute` should execute: at the
+ * scrubbed tick, but never before the server allows (next tick, plus the
+ * launch delay for launches).
+ */
+export function scheduledAt(scrubMinute: number, liveMinute: number, isLaunch: boolean): number {
+  const earliest = tickAtOrAfter(liveMinute + (isLaunch ? LAUNCH_DELAY : 0));
+  return Math.max(tickAtOrAfter(scrubMinute), earliest, tickOf(liveMinute) + TICK);
+}
+
+/** A prediction seen from your side of the fight. */
+export type YourOutcome = 'win' | 'lose' | 'unknown' | 'none';
+
+/**
+ * Win/lose from `you`'s point of view. Predictions are from the sub owner's
+ * side, so an enemy sub that "wins" against your outpost is a loss for you.
+ * Fights you're not part of (and peaceful arrivals) are 'none'.
+ */
+export function outcomeFor(prediction: ArrivalPrediction, you: PlayerId): YourOutcome {
+  if (prediction.outcome === 'safe') return 'none';
+  const involved = prediction.owner === you || (prediction.combat?.details.sides.some((s) => s.player === you) ?? false);
+  if (!involved) return 'none';
+  if (prediction.outcome === 'unknown') return 'unknown';
+  if (prediction.owner === you) return prediction.outcome;
+  return prediction.outcome === 'win' ? 'lose' : 'win';
+}
+
+/**
+ * One line about a predicted fight, from your side. For a launch you'd lose,
+ * says how many more drillers it needs (ties go to the defender).
+ */
+export function outcomeSummary(prediction: ArrivalPrediction, you: PlayerId): string {
+  const outcome = outcomeFor(prediction, you);
+  if (prediction.outcome === 'safe') return 'Arrives without a fight.';
+  if (outcome === 'unknown') return "Outcome unknown: the target is outside your sonar.";
+  const sides = prediction.combat?.details.sides ?? [];
+  const mine = sides.find((s) => s.player === you);
+  if (outcome === 'win') return `Wins with ${mine?.drillersAfter ?? 0} drillers left.`;
+  if (outcome === 'lose') {
+    if (prediction.owner === you) {
+      const enemy = sides.find((s) => s.player !== you);
+      const shield = prediction.combat?.details.shieldAfter ?? 0;
+      const needed = (enemy?.drillersAfter ?? 0) + shield + 1;
+      return `Loses: needs about ${needed} more drillers.`;
+    }
+    return prediction.combat?.outpost ? 'Your outpost is predicted to fall.' : 'Your sub is predicted to lose this fight.';
+  }
+  return '';
+}

@@ -33,7 +33,22 @@
     }
   </dl>
 
+  @if (incoming().length) {
+    <h3 id="incoming-title">Incoming</h3>
+    <ul class="incoming" aria-labelledby="incoming-title">
+      @for (s of incoming(); track s.id) {
+        <li>
+          <button type="button" class="link" (click)="selectSub.emit(s.id)">{{ s.text }}</button>
+          <span class="muted">{{ s.eta }}</span>
+        </li>
+      }
+    </ul>
+  }
+
   @if (isMine()) {
+    @if (tm.active()) {
+      <p class="scheduled">Orders from here are <strong>scheduled</strong> for the forecast time.</p>
+    }
     @if (!launching()) {
       <div class="actions">
         <button type="button" class="primary" [disabled]="busy()" (click)="launchStart.emit()">Launch…</button>
@@ -51,6 +66,9 @@
         <p>
           @if (target(); as t) {
             To <strong>{{ t.name }}</strong> · arrives in {{ travel() }}
+            @if (scheduledLabel()) {
+              <br />Leaves at {{ scheduledLabel() }} (scheduled)
+            }
           } @else {
             <span class="muted">Pick a target on the map.</span>
           }
@@ -65,6 +83,11 @@
           aria-describedby="launch-drillers-error"
         />
         <p id="launch-drillers-error" class="error">{{ launchForm.drillers().errors()[0]?.message }}</p>
+        @if (draft(); as d) {
+          <p class="prediction" [class]="'prediction ' + d.outcome" role="status">
+            <span class="dot" aria-hidden="true"></span>{{ d.text }}
+          </p>
+        }
         @for (spec of launchForm.specialists; track $index) {
           <label class="check">
             <input type="checkbox" [formField]="spec.selected" />

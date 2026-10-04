@@ -18,9 +18,11 @@ export const DAY = 24 * HOUR;
  * each game at start and ends games whose version doesn't match instead of
  * replaying them wrongly.
  *
- * History: 1 = constant-area maps, simultaneous production, draws, resign.
+ * History:
+ * - 1: constant-area maps, simultaneous production, draws, resign.
+ * - 2: disabling a shield drops it to 0 and stops charging; capture re-enables it.
  */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** The simulation resolves orders and events on 10-minute ticks. */
 export const TICK = 10 * MINUTE;
