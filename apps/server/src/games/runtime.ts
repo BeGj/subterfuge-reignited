@@ -31,6 +31,12 @@ const LOOP_INTERVAL_MS = 1000;
 export const EVENTS_PER_PLAYER = 100;
 /** Furthest ahead an order may be scheduled, in game minutes. */
 export const MAX_SCHEDULE_AHEAD = 7 * 24 * HOUR;
+/**
+ * A finished game is dropped from memory once nobody has looked at it for
+ * this long (real ms). Opening it again reloads it from the order log.
+ * Running games always stay loaded: the loop advances them.
+ */
+export const FINISHED_IDLE_UNLOAD_MS = 10 * 60 * 1000;
 /** Most orders one player may have waiting at once. */
 export const MAX_PENDING_PER_PLAYER = 100;
 /** Order submissions + cancellations per player per game, per real minute. */
@@ -58,6 +64,8 @@ interface LiveGame {
   busy: number;
   /** Game time of the last snapshot sent to all players. */
   publishedTime: GameTime;
+  /** Real time (ms) someone last looked at or acted in this game; see FINISHED_IDLE_UNLOAD_MS. */
+  lastActiveMs: number;
 }
 
 /** Delivers a snapshot to one player's sockets. Wired to Socket.IO in main.ts. */
@@ -124,8 +132,14 @@ export class GameRuntime {
   async snapshot(gameId: string, userId: string): Promise<GameSnapshot> {
     const playerId = await this.playerIdFor(gameId, userId);
     const game = await this.get(gameId);
+    game.lastActiveMs = this.now();
     this.catchUp(game);
     return this.snapshotFor(game, playerId);
+  }
+
+  /** Whether a game is currently held in memory (for tests and diagnostics). */
+  isLoaded(gameId: string): boolean {
+    return this.games.has(gameId);
   }
 
   async issueOrder(userId: string, request: IssueOrderRequest): Promise<PendingOrder> {
@@ -259,6 +273,7 @@ export class GameRuntime {
       events: new Map(players.map((p) => [p.playerId, []])),
       busy: 0,
       publishedTime: -1,
+      lastActiveMs: this.now(),
     };
     // Replay everything up to now. Events from the replay are kept so
     // reconnecting players still see recent history.
@@ -333,7 +348,10 @@ export class GameRuntime {
 
   private loop(): void {
     for (const game of this.games.values()) {
-      if (game.finished) continue;
+      if (game.finished) {
+        this.unloadIfIdle(game);
+        continue;
+      }
       try {
         this.catchUp(game);
         if (game.state.time > game.publishedTime) {
@@ -347,8 +365,17 @@ export class GameRuntime {
     }
   }
 
+  /** Drops a finished game nobody has looked at for a while (it reloads on demand). */
+  private unloadIfIdle(game: LiveGame): void {
+    if (game.busy > 0 || this.now() - game.lastActiveMs < FINISHED_IDLE_UNLOAD_MS) return;
+    this.games.delete(game.id);
+    this.log.info(`Unloaded finished game ${game.id} (idle)`);
+  }
+
   private async finish(game: LiveGame): Promise<void> {
     game.finished = true;
+    // Give players time to see the result before the game can be unloaded.
+    game.lastActiveMs = this.now();
     await this.sql`
       UPDATE games SET status = 'finished', finished_at = now(), winner = ${game.state.winner},
         end_reason = ${game.state.winner ? 'won' : 'draw'}

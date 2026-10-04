@@ -7,6 +7,7 @@ import { createTestDb, createUser, dbAvailable, type TestDb } from '../test/test
 import { createGame, joinGame, startGame } from './lobby-store.ts';
 import {
   EVENTS_PER_PLAYER,
+  FINISHED_IDLE_UNLOAD_MS,
   GameRuntime,
   MAX_PENDING_PER_PLAYER,
   MAX_SCHEDULE_AHEAD,
@@ -289,6 +290,32 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
     expect(view.winner).toBe('p2');
     expect(view.endedAt).toBe(30);
     await expect(t.issue(t.b, shieldOff(snap))).rejects.toThrow(/game is over/);
+  });
+
+  it('unloads a finished game nobody is looking at, and reloads it on demand', async () => {
+    const t = await setup();
+    t.setMinute(20);
+    await t.issue(t.a, { kind: 'resign' });
+    t.setMinute(40);
+    t.loop(); // executes the resign and finishes the game
+    await expect.poll(async () => (await sql<{ status: string }[]>`SELECT status FROM games WHERE id = ${t.gameId}`)[0]!.status).toBe('finished');
+    const before = (await t.runtime.snapshot(t.gameId, t.b)).view;
+
+    // Still being looked at: stays loaded.
+    const idle = FINISHED_IDLE_UNLOAD_MS / 1000; // test clock: 1 real s = 1 game min
+    t.setMinute(40 + idle / 2);
+    t.loop();
+    expect(t.runtime.isLoaded(t.gameId)).toBe(true);
+
+    // Nobody looked for longer than the limit: unloaded.
+    t.setMinute(40 + idle * 2);
+    t.loop();
+    expect(t.runtime.isLoaded(t.gameId)).toBe(false);
+
+    // Opening it again reloads the same final state.
+    const after = (await t.runtime.snapshot(t.gameId, t.b)).view;
+    expect(t.runtime.isLoaded(t.gameId)).toBe(true);
+    expect({ winner: after.winner, endedAt: after.endedAt }).toEqual({ winner: before.winner, endedAt: before.endedAt });
   });
 
   it('ends instead of replaying a game started under different rules', async () => {

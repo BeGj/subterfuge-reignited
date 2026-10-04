@@ -4,15 +4,7 @@ This is the one list of what's next, in order. Update it when an item is done or
 
 ## Now: short items
 
-### 1. Unload finished and idle games from memory
-- **Problem:** `GameRuntime.games` (`apps/server/src/games/runtime.ts`) only ever grows. Finished games stay in memory, and opening a finished game (`watchGame`) loads it permanently.
-- **Plan:**
-  - Unload a finished game when nobody has watched it for a while. Use a last-watched timestamp, refreshed on `watchGame` and on each published snapshot.
-  - The next `get()` reloads it from the order log.
-  - Running games stay loaded, because the loop needs them.
-- **Done when:** a runtime DB test covers unload and reload, and the policy is recorded in decisions.md.
-
-### 2. End a stale game by agreement
+### 1. End a stale game by agreement
 - **Problem:** a running game only ends by a win, a draw, or everyone else resigning.
 - **Agreed design:**
   - An engine **order** `voteEnd`, with a way to withdraw the vote. It must be an order so replays agree.
@@ -21,7 +13,7 @@ This is the one list of what's next, in order. Update it when an item is done or
   - Not creator-only: a losing creator could otherwise wipe out everyone else's game. A player who refuses can still be bypassed by others resigning.
 - **Client:** "Propose ending the game" next to Resign, showing who has agreed. Votes are public to the game's players.
 
-### 3. Clean up the lobby
+### 2. Clean up the lobby
 - **Problem:** full or stale games clutter "Open games", e.g. smoke-test games whose start step never ran.
 - **Plan:**
   - "Open games" lists only games you can actually join (not full).
@@ -94,6 +86,7 @@ Only the Queen exists today. Specialists are where most of Subterfuge's strategy
 
 ## Done (most recent first)
 
+- **Unload idle finished games:** dropped from memory after 10 minutes unviewed, and reloaded on demand.
 - **Connection robustness:** the client never sits silently on "connecting…". It shows a "can't reach the server" banner, retries refused connections, and asks to log in again when the session has expired.
 - **Playtest round 2:**
   - enemy launches visible shortly before they happen
