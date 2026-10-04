@@ -60,6 +60,7 @@ export class Lobby {
 
   /** "Won by alice", or "Draw" when a finished game has no winner. */
   protected resultText(game: GameSummary): string {
+    if (game.endReason === 'rulesChanged') return 'Ended: the rules were updated';
     if (!game.winner) return 'Draw';
     return `Won by ${game.players.find((p) => p.playerId === game.winner)?.username ?? '—'}`;
   }

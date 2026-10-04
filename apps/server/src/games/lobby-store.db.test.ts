@@ -119,7 +119,7 @@ describe.skipIf(!dbAvailable)('lobby-store (Postgres)', () => {
     const id = await newGame(a);
     await joinGame(sql, id, b);
     await startGame(sql, id, a);
-    await sql`UPDATE games SET status = 'finished', finished_at = now(), winner = 'p1' WHERE id = ${id}`;
+    await sql`UPDATE games SET status = 'finished', finished_at = now(), winner = 'p1', end_reason = 'won' WHERE id = ${id}`;
 
     const ids = async (u: string) => (await listGames(sql, u, { limit: 100 })).map((g) => g.id);
     expect(await ids(a)).toContain(id);

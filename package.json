@@ -18,7 +18,8 @@
     "test": "npm run build -w @subterfuge/engine && npm run test --workspaces --if-present",
     "typecheck": "npm run build -w @subterfuge/engine && npm run typecheck --workspaces --if-present",
     "db:up": "docker compose up -d db",
-    "migrate": "npm run migrate -w @subterfuge/server"
+    "migrate": "npm run migrate -w @subterfuge/server",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1",

@@ -26,6 +26,8 @@ import type { GameState, Outpost, OutpostType, Player, PlayerId, Point, Speciali
  * - Balance is approximated: every dormant outpost is assigned to the player
  *   whose starting outpost is nearest (straight-line distance), instead of
  *   simulating "every player sends 1 driller to every outpost".
+ * - Map geometry trades two invariants against each other; see
+ *   SPACING_SCALE_EXPONENT below.
  */
 
 export interface MapPlayer {
@@ -40,15 +42,57 @@ export interface GenerateMapOptions {
 }
 
 /**
- * Average spacing between outposts in map units. With the repulsion below,
- * the typical nearest-neighbour distance ends up around 0.9× this, i.e.
- * roughly 6 hours of travel at 1.0 speed.
+ * Average spacing between outposts in map units for a full 10-player game.
+ * With the repulsion below, the typical nearest-neighbour distance ends up
+ * around 0.9× this, i.e. roughly 6 hours of travel at 1.0 speed. Smaller
+ * games spread out further (see SPACING_SCALE_EXPONENT): about 9.5 hours at
+ * 2 players.
  */
 export const OUTPOST_SPACING = 400;
+
+/**
+ * How much the map grows when there are fewer players than `MAX_PLAYERS`.
+ *
+ * At 0.5 the map *area* is held constant: every game is `mapSize(10)` units
+ * square and extra players just crowd it with more outposts.
+ *
+ * Why not constant density (the obvious reading of "keep outpost density the
+ * same", which shrinks the map as players are removed)? Because sonar range is
+ * an absolute distance, so a small map has no fog of war: at 2 players a
+ * player's five outposts' sonar covered 99 % of the map. Measured with
+ * `npm run map:stats`:
+ *
+ *   exponent   2p neighbour travel   2p map seen   10p neighbour travel
+ *   0          6.7 h                 99 %          6.3 h
+ *   0.5        9.5 h                 59-76 %       6.3 h
+ *   0.75       12.1 h                36-60 %       6.3 h
+ *
+ * 0.5 gives a 2-player game real fog for a 2.8-hour tax on travel and changes
+ * nothing for 4 players and up. Past that, travel gets long enough to make a
+ * real-time game feel slow.
+ *
+ * At 10 players the geometry is identical for every value of this constant
+ * (`(10/10) ** e === 1`), so the dial only ever trades small-game travel time
+ * against small-game fog. Tunable — see docs/engine.md.
+ */
+export const SPACING_SCALE_EXPONENT = 0.5;
 /** Candidate maps generated per game; the most balanced one is kept (the original uses 500). */
 export const MAP_CANDIDATES = 150;
 /** Share of outposts that are generators is drawn from this range. */
 export const GENERATOR_SHARE_RANGE = [0.3, 0.6] as const;
+
+/**
+ * Side length of the (square) map for `n` players. Constant density at
+ * exponent 0; constant area at exponent 0.5.
+ */
+export function mapSize(n: number): number {
+  const total = n * OUTPOSTS_PER_PLAYER;
+  const scale = (MAX_PLAYERS / n) ** SPACING_SCALE_EXPONENT;
+  // Rounded rather than ceiled: at exponent 0.5 the product is exactly
+  // OUTPOST_SPACING * sqrt(MAX_PLAYERS * OUTPOSTS_PER_PLAYER) for every n,
+  // and floating point lands a hair either side of it.
+  return Math.round(Math.sqrt(total) * OUTPOST_SPACING * scale);
+}
 
 const RELAX_ITERATIONS = 30;
 /** Player centres stay this fraction of the map size away from the edges. */
@@ -74,7 +118,7 @@ export function generateMap(options: GenerateMapOptions): GameState {
 
   const rng = createRandom(seed);
   const total = n * OUTPOSTS_PER_PLAYER;
-  const size = Math.ceil(Math.sqrt(total) * OUTPOST_SPACING);
+  const size = mapSize(n);
 
   let best: Candidate | undefined;
   for (let i = 0; i < MAP_CANDIDATES; i++) {

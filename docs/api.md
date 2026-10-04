@@ -13,8 +13,8 @@ Every endpoint and socket event except registering and logging in requires a ses
 |---|---|---|---|
 | `GET /api/games?before=<id>&limit=<1..100>` | – | `200 GameSummary[]`: unfinished games, plus finished ones you played. Newest first, 50 per page by default. For the next page, pass the last id as `before` | `400` invalid cursor |
 | `GET /api/games/:id` | – | `200 GameSummary` | `404` |
-| `POST /api/games` | `{ name, maxPlayers, speed }` | `201 GameSummary`; you join seat 1 | `400` invalid |
-| `POST /api/games/:id/join` | – | `204` | `409` started, full or already joined |
+| `POST /api/games` | `{ name, maxPlayers, speed }` | `201 GameSummary`; you join seat 1 | `400` invalid, `429` too many created |
+| `POST /api/games/:id/join` | – | `204` | `409` started, full or already joined; `429` too many joins |
 | `POST /api/games/:id/leave` | – | `204` | `409` started, creator, or not joined |
 | `POST /api/games/:id/start` | – | `204`: assigns player ids `p1..pN` in seat order and starts the clock | `403` not the creator, `409` started or fewer than 2 players |
 | `DELETE /api/games/:id` | – | `204` | `403` not the creator, `409` already started |
@@ -22,6 +22,8 @@ Every endpoint and socket event except registering and logging in requires a ses
 Notes:
 - `speed` must be one of `GAME_SPEEDS` (1, 60 or 240 game minutes per real minute).
 - Joins lock the game row, so two players racing for the last seat can't both get it.
+- Every lobby mutation broadcasts `lobbyChanged` to every socket, so `POST` is rate limited per user: 20 games/hour created, 60/hour joined. Limits are in-memory and reset on restart.
+- `GameSummary.endReason` is `won`, `draw` or `rulesChanged` once a game is finished. `rulesChanged` means it started under older rules and was ended instead of being replayed (see `RULES_VERSION` in [engine.md](engine.md#rules-version)).
 - Errors are returned as `{ "error": "message" }`.
 
 ## Socket.IO

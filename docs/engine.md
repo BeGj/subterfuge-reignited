@@ -24,6 +24,10 @@ The types (`GameState`, `Order`, `GameEvent`, `PlayerView`) live in `types.ts`, 
 - **Neptunium:** integer units, where 1 kg = `NEPTUNIUM_UNIT` (1440) units. Each mine adds (outposts owned) units per minute, which works out to 1 kg per day per outpost.
 - **Shields:** integer "progress"; see `shield.ts`. This keeps charging exact without fractions.
 
+## Rules version
+
+`RULES_VERSION` in `constants.ts` identifies the rules (map generation + simulation). Games store the version they started with, and the server ends, rather than replays, a game whose version differs. **Bump it whenever a change alters what `generateMap` or `advance` produce for the same input**, and add a line to the history comment next to it. Pure refactors and performance work that keep `replay.test.ts` byte-identical don't need a bump.
+
 ## Determinism rules
 
 The server and every browser must compute identical results from the same inputs:
@@ -37,14 +41,16 @@ The server and every browser must compute identical results from the same inputs
 `map.ts` follows the developer description quoted in goal.md:
 
 1. Place N player centres and push them apart.
-2. Place N×10 outposts and push them apart. The map side is `ceil(√(N×10) × OUTPOST_SPACING)`, with `OUTPOST_SPACING = 400`, so the nearest neighbour is about 6 travel-hours away.
+2. Place N×10 outposts and push them apart. The map is always `mapSize(10) = 4000` units square, whatever the player count (`SPACING_SCALE_EXPONENT = 0.5` keeps the *area* constant, not the density), so the nearest neighbour is 6–10 travel-hours away depending on player count.
 3. Players pick their 5 starting outposts in snake order (1→N, then N→1), taking the unclaimed outpost nearest their centre. The Queen goes on the first pick; the other four get 40 drillers each.
 4. Outpost types (30–60% generators) and shield maxes (1/3 strong) are dealt from shuffled decks, round-robin by distance, so players get similar resources.
 5. Generate `MAP_CANDIDATES` (150) candidate maps and keep the most balanced one. Balance is measured by assigning every dormant outpost to the nearest starting outpost and comparing outpost counts per player.
 
+Run `npm run map:stats -w @subterfuge/engine` for the table this trades off against: travel time and the share of the map a player can see, per player count.
+
 **Known issues:**
 - 10-player maps are less even than the original's: the spread is usually 2–4 outposts rather than 2.
-- In 2-player games, sonar covers almost the whole map, so there's little fog of war. Tune `OUTPOST_SPACING` or the sonar range if that matters.
+- Constant map area means small games travel further: about 9.5 h between neighbours at 2 players, versus 6.3 h at 10. That is the price of having fog of war at all in a 2-player game; `SPACING_SCALE_EXPONENT` is the dial.
 
 ## Simulation: order of events in each tick
 

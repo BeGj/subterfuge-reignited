@@ -42,7 +42,15 @@ export interface GameSummary {
   startedAt: string | null;
   players: GameSeat[];
   winner: string | null;
+  /** Why a finished game ended; `null` while it hasn't. */
+  endReason: GameEndReason | null;
 }
+
+/**
+ * `rulesChanged`: the game was started under older rules (see
+ * `RULES_VERSION`) and was ended instead of being replayed incorrectly.
+ */
+export type GameEndReason = 'won' | 'draw' | 'rulesChanged';
 
 export interface CreateGameRequest {
   name: string;

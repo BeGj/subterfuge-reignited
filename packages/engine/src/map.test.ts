@@ -6,7 +6,7 @@ import {
   STRONG_SHIELD_SHARE,
   WEAK_SHIELD_MAX,
 } from './constants.js';
-import { generateMap } from './map.js';
+import { generateMap, mapSize } from './map.js';
 import type { GameState } from './types.js';
 
 const players = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `Player ${i + 1}` }));
@@ -86,12 +86,20 @@ describe('generateMap', () => {
         expect(p.y).toBeLessThan(state.height);
         expect(Number.isInteger(p.x) && Number.isInteger(p.y)).toBe(true);
       }
+      // Spacing scales with the map, which grows for small games so that a
+      // 2-player game has fog of war (see SPACING_SCALE_EXPONENT). The band
+      // is stated as travel time at 1.0 speed: 5 to 12 hours between
+      // neighbouring outposts, at every player count.
       const nn = nearestNeighbourDistances(state);
       expect(Math.min(...nn)).toBeGreaterThan(120);
       const mean = nn.reduce((a, b) => a + b, 0) / nn.length;
-      expect(mean).toBeGreaterThanOrEqual(240);
-      expect(mean).toBeLessThanOrEqual(480);
+      expect(mean).toBeGreaterThanOrEqual(5 * 60);
+      expect(mean).toBeLessThanOrEqual(12 * 60);
     }
+  });
+
+  it('gives every player count a map the same size, so sonar coverage is comparable', () => {
+    for (let n = 2; n <= 10; n++) expect(mapSize(n)).toBe(mapSize(10));
   });
 
   it('picks a balanced map', () => {

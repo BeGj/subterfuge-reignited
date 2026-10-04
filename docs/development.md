@@ -34,8 +34,20 @@ Open **<http://localhost:4200>** during development. Ctrl+C stops everything.
 | `npm run typecheck` | Type-checks all workspaces |
 | `npm run db:up` | Starts only Postgres (`docker compose up -d db`) |
 | `npm run migrate` | Applies pending migrations without starting the server |
+| `npm run smoke` | Plays a real 2-player game end to end against a **running** server: registers two accounts, creates and starts a game, launches a sub and waits for it to arrive, checks fog of war |
 
-To run a single workspace: `npm run test -w @subterfuge/engine`, `npm run dev -w @subterfuge/server`, and so on.
+To run a single workspace: `npm run test -w @subterfuge/engine`, `npm run dev -w @subterfuge/server`, and so on. `npm run map:stats -w @subterfuge/engine` prints travel times and sonar coverage per player count.
+
+## Smoke test
+
+`npm test` covers units and database-backed tests but never plays a game over HTTP. `scripts/smoke.mjs` does, against a server you already have running:
+
+```sh
+npm run db:up && npm run dev     # one terminal
+npm run smoke                    # another
+```
+
+It creates its own throwaway game, so it never touches a game you are playing. It registers two new accounts each run and registration is limited to 10 per IP per hour, so it can run about five times an hour from one machine; after that it fails on registration until the window rolls over. Set `SMOKE_TIMEOUT_MS` (default 300000) if your machine is slow — at the fastest game speed a sub needs about 2.5 real minutes to cross a 2-player map. CI runs it on pushes to `main` and on pull requests.
 
 ## Environment variables
 

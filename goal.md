@@ -33,7 +33,7 @@ From here on this document uses the official terms.
 ### Game setup
 - **Players:** 2–10.
 - **Map generation:**
-  1. Create a map whose area keeps outpost density the same for any player count.
+  1. Create a map whose *area* is the same for any player count, so sonar covers a comparable share of it. ⚠️ We deliberately do **not** keep outpost density constant: sonar range is an absolute distance, so a smaller map has no fog of war at all (at 2 players, constant density put 99 % of the map inside one player's sonar). See `docs/decisions.md`.
   2. Place N player "centres" (N = number of players). These repel each other so they spread out.
   3. Add **N × 10 outposts** at random positions. These also repel each other, but not into a uniform grid.
   4. Each player gets the **5 outposts nearest their centre**. The closest one holds the Queen. The other 4 start with **40 drillers each**.
@@ -233,9 +233,14 @@ This is a summary. For details see [docs/architecture.md](docs/architecture.md),
 ---
 
 ### Open questions for our clone
-- Time scale: real-time multi-day games, accelerated games, or both?
+Still open:
 - Shield ratio: 1/3 strong (our current choice) or 2/3 strong (developer quote)?
-- Should a captured outpost's shield reset to 0? Our original note assumed so, but the official rules don't say.
 - Which specialists to include in v1? Suggestion: Queen, Princess, Helmsman, Lieutenant/General, Inspector/Security Chief, Foreman, Thief, Navigator, Intelligence Officer. Add the complex ones (Martyr, Double Agent, Pirate, Hypnotist, Revered Elder) later.
 - Domination mode: include in v1, and what outpost target per player count?
-- Distance → travel-time scale on the map (pixels per travel-hour at 1.0 speed).
+
+Answered (details in `docs/`):
+- **Time scale:** both. Per-game speed presets: real time, 60× and 240× (`GAME_SPEEDS`).
+- **Shield after capture:** an attacker only wins once the shield is drained, so a captured outpost starts at 0 charge and recharges from there.
+- **Distance scale:** map units with `SUB_SPEED` = 1 unit per game minute. Every map is 4000 units square, so neighbouring outposts are about 6.3 travel-hours apart at 10 players and 9.5 h at 2. Sonar is 1620 units (27 h). See `docs/engine.md` and `npm run map:stats -w @subterfuge/engine`.
+
+For the full backlog and what to build next, see [docs/handoff.md](docs/handoff.md).

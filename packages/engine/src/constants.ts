@@ -10,6 +10,18 @@ export const MINUTE = 1;
 export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
 
+/**
+ * Version of the game rules: map generation plus simulation. A running game
+ * is rebuilt by replaying its orders, so it must replay under the exact rules
+ * it started with. **Bump this whenever a change alters what `generateMap` or
+ * `advance` produce for the same input** (CLAUDE.md). The server stores it on
+ * each game at start and ends games whose version doesn't match instead of
+ * replaying them wrongly.
+ *
+ * History: 1 = constant-area maps, simultaneous production, draws, resign.
+ */
+export const RULES_VERSION = 1;
+
 /** The simulation resolves orders and events on 10-minute ticks. */
 export const TICK = 10 * MINUTE;
 

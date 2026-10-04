@@ -4,8 +4,61 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — Rules versioning: games end instead of replaying under new rules
+**Decision:**
+- The engine has `RULES_VERSION`, and every game stores the version it started under (`games.rules_version`, migration 003).
+- When the runtime loads a game whose version differs, it doesn't replay it. It marks it `finished` with `end_reason = 'rulesChanged'`, and the lobby shows "Ended: the rules were updated".
+- Bump the version whenever map generation or simulation results change.
+**Why:** a game is rebuilt by replaying its orders, so changing `map.ts` or `advance` silently rewrote running games on the next restart. This was found in review: after the constant-area map change, a pre-existing game's stored launch was rejected ("You do not own the launch outpost") and an earlier capture vanished from its history.
+**Alternative not taken:** keeping old rule versions runnable side by side (versioned engines). It's worth it after release, when ending players' games is no longer acceptable. Pre-release, ending them is fine.
+
+### 2026-10-04 — Map area is constant, outpost density is not
+**Decision:** every game is `mapSize(10) = 4000` units square regardless of player count (`SPACING_SCALE_EXPONENT = 0.5` in `map.ts`). Extra players crowd the same map with more outposts.
+**Why:** goal.md originally said "keep outpost density the same for any player count", which makes the map *smaller* with fewer players. Sonar range is an absolute distance, so that put a 2-player game's entire map inside one player's sonar: measured with `npm run map:stats`, a player saw 99 % of the map, and 91 % at 6 players. Fog of war is a core mechanic and it was simply absent from small games.
+**Trade-off, measured (`npm run map:stats`):**
+
+| players | map | neighbour travel | sonar rings | map seen (worst / best player) |
+|---|---|---|---|---|
+| 2 | 4000 | 9.5 h | 2.8 | 76 % / 59 % |
+| 4 | 4000 | 8.1 h | 3.3 | 83 % / 39 % |
+| 6 | 4000 | 7.7 h | 3.5 | 79 % / 41 % |
+| 10 | 4000 | 6.3 h | 4.3 | 72 % / 32 % |
+
+Constant area costs small games some travel time (9.5 h between neighbours at 2 players, versus 6.7 h under constant density) and buys fog everywhere. `SPACING_SCALE_EXPONENT` is the dial; 0.75 would give 2-player games even less visibility (36–60 %) for 12 h trips, which felt too slow to be worth it.
+**Note:** 10-player geometry is identical for every value of the constant, so this decision only affects games with fewer than 10 players.
+**Assumption flagged:** the original's exact map sizing could not be checked (the rulebook pages are unreachable from here), so this is tuned against the *sonar rings* figure (≈3–4 neighbouring rings) that goal.md records, not against a quoted map size.
+
+### 2026-10-04 — Single replica only: the game runtime lives in memory
+**Decision:** `apps/server/src/games/runtime.ts` keeps every live game's state in the server process, keyed off the wall clock and guarded by an in-process `busy` flag. Run **one** app instance.
+**Why:** the whole design leans on this. Game state is rebuilt from seed + orders rather than shared, so two processes would derive two different states for the same game from the same rows, both would advance it, and `finish()` would be a last-write-wins race. Nothing in the schema prevents this, so the constraint has to be documented.
+**Revisit if** we ever need horizontal scaling: the runtime would move behind a per-game Postgres advisory lock (as `migrate.ts` already does), or state would have to be stored rather than replayed. Scaling the compose file before then silently corrupts games.
+
+### 2026-10-04 — Lobby mutations are rate limited
+**Decision:** `lobby-routes.ts` limits game creation and joining per user (20/hour and 60/hour), reusing `auth/rate-limit.ts`.
+**Why:** every lobby mutation broadcasts `lobbyChanged`, which makes every connected client refetch `/api/games`. Without a limit, one authenticated script becomes a refetch storm for every browser in the deployment, on top of growing the `games` table.
+**Consequence:** limits are per user, not per IP, and are in-memory, so they reset on restart and don't apply across replicas. Same caveat as the login limits; move them into Postgres if the rate limiter ever does.
+
+### 2026-10-04 — CI runs test, typecheck, build, replay bench and docker build
+**Decision:** `.github/workflows/ci.yml` runs the §7 checklist on pushes to `main` and on PRs, with a Postgres 18 service so the DB-backed tests don't skip themselves.
+**Why:** the three workspaces share `packages/engine`, so a change in one can break another with no local signal. The DB tests skip when Postgres is down, which would silently drop 18 tests without the service. The Docker job catches what `npm test` can't: the image compiles the Angular bundle and runs the server's TypeScript directly.
+
+### 2026-10-04 — Known limitation: loaded games are never unloaded
+**Status: planned** (fix tracked in [handoff.md §4.1](handoff.md)).
+**Decision:** `GameRuntime.games` only ever grows. Finished games, and finished games opened for viewing, stay in memory.
+**Why it's acceptable for now:** we're pre-release with few games. A reload is cheap (see the replay numbers above) and the next `get()` would rebuild it anyway.
+
+### 2026-10-04 — Ending stale games will be an agreed engine order, not a status flag
+**Status: planned, design agreed** (see [handoff.md §4.2](handoff.md)).
+**Decision (not built yet):** a `voteEnd`-style order. When all remaining players agree, the engine ends the game with no winner, reusing the draw path.
+**Why:**
+
+- It has to be an order so replays reproduce it.
+- Not creator-only, because a losing creator could otherwise wipe out everyone else's game.
+- No new DB status is needed: `finished` with `winner = NULL` already covers it.
+
 ### 2026-10-04 — Runtime loop, speeds and no snapshots (yet)
 **Decision:**
+
 - A 1-second `setInterval` loop advances every running game to its current tick.
 - Speeds are fixed presets (`GAME_SPEEDS`: 1×, 60×, 240× game minutes per real minute).
 - We don't store state snapshots.
@@ -17,6 +70,7 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ### 2026-10-04 — Draws and resignations are part of the engine
 **Decision:**
+
 - `GameState.endedAt` marks a finished game. `winner` stays null in a draw, i.e. when everyone left is eliminated in the same tick.
 - Resigning is an ordinary `resign` order.
 **Why:**
@@ -29,6 +83,7 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ### 2026-10-04 — Order abuse limits, and per-player event feeds
 **Decision:**
+
 - A per-player order rate limit (60 per real minute, reusing `RateLimiter`), plus a cap of 100 waiting orders per player.
 - At most 5 watched games per socket.
 - Events filtered per player before trimming.
@@ -78,6 +133,7 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 ### 2026-10-04 — Engine is compiled; server runs TypeScript directly
 **Decision:** `packages/engine` is compiled with `tsc` to `dist/`. `apps/server` runs `.ts` source directly with Node 24's built-in type stripping.
 **Why:**
+
 - Angular's build expects compiled packages.
 - The server needs no build step, which keeps the Dockerfile and `npm run dev` simple.
 **Consequence:** server code must use only erasable TypeScript syntax (no `enum` or parameter properties) and `.ts` import extensions.
@@ -89,6 +145,7 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 ### 2026-10-04 — Hand-written auth, no Keycloak
 **Decision:** username + password with `crypto.scrypt` and Postgres-backed sessions in an httpOnly cookie. Details are in [auth.md](auth.md).
 **Why:**
+
 - The project must run with `docker compose up` and no third-party services.
 - Keycloak would work self-hosted, but it's a heavy Java service with realm config to maintain and OIDC wiring in both the client and the server. That's more complexity than the rest of the auth combined.
 **Revisit if:** we need SSO, social login or MFA.

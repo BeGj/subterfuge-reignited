@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import type { GameSnapshot, OrderInput, OutpostView } from '@subterfuge/engine';
+import { RULES_VERSION, type GameSnapshot, type OrderInput, type OutpostView } from '@subterfuge/engine';
 import type { Sql } from '../db.ts';
 import { createEventBus } from '../events.ts';
 import { createTestDb, createUser, dbAvailable, type TestDb } from '../test/test-db.ts';
@@ -276,8 +276,12 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
 
     t.setMinute(40);
     t.loop();
-    await expect.poll(async () => (await sql<{ status: string; winner: string | null }[]>`
-      SELECT status, winner FROM games WHERE id = ${t.gameId}`)[0]).toEqual({ status: 'finished', winner: 'p2' });
+    await expect.poll(async () => (await sql<{ status: string; winner: string | null; endReason: string | null }[]>`
+      SELECT status, winner, end_reason FROM games WHERE id = ${t.gameId}`)[0]).toEqual({
+      status: 'finished',
+      winner: 'p2',
+      endReason: 'won',
+    });
     await expect.poll(async () => (await sql<{ cancelledAt: Date | null }[]>`
       SELECT cancelled_at FROM orders WHERE id = ${later.id}`)[0]!.cancelledAt).not.toBeNull();
 
@@ -285,6 +289,21 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
     expect(view.winner).toBe('p2');
     expect(view.endedAt).toBe(30);
     await expect(t.issue(t.b, shieldOff(snap))).rejects.toThrow(/game is over/);
+  });
+
+  it('ends instead of replaying a game started under different rules', async () => {
+    const t = await setup();
+    await sql`UPDATE games SET rules_version = ${RULES_VERSION + 1} WHERE id = ${t.gameId}`;
+    await expect(t.runtime.snapshot(t.gameId, t.a)).rejects.toThrow(/older version of the rules/);
+    const [row] = await sql<{ status: string; endReason: string | null; winner: string | null }[]>`
+      SELECT status, end_reason, winner FROM games WHERE id = ${t.gameId}`;
+    expect(row).toEqual({ status: 'finished', endReason: 'rulesChanged', winner: null });
+  });
+
+  it('records the rules version when a game starts', async () => {
+    const t = await setup();
+    const [row] = await sql<{ rulesVersion: number }[]>`SELECT rules_version FROM games WHERE id = ${t.gameId}`;
+    expect(row!.rulesVersion).toBe(RULES_VERSION);
   });
 
   it("keeps each player's event feed separate, so a busy player can't flush another's", async () => {

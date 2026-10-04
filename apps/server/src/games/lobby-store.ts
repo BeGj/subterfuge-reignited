@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import type { GameSummary } from '@subterfuge/engine';
+import { RULES_VERSION, type GameSummary } from '@subterfuge/engine';
 import type { Sql, Tx } from '../db.ts';
 
 /** Thrown for expected, user-facing failures; routes map `status` to HTTP. */
@@ -13,7 +13,7 @@ export class LobbyError extends Error {
 
 const summaryColumns = (sql: Sql) => sql`
   g.id, g.name, g.status, g.max_players, g.speed, cu.username AS created_by,
-  g.created_at, g.started_at, g.winner,
+  g.created_at, g.started_at, g.winner, g.end_reason,
   COALESCE(
     json_agg(
       json_build_object(
@@ -149,7 +149,8 @@ export async function startGame(sql: Sql, gameId: string, userId: string): Promi
         WHERE game_id = ${gameId} AND user_id = ${p.userId}`;
     }
     await tx`
-      UPDATE games SET status = 'running', started_at = now(), seed = ${randomInt(2 ** 31 - 1)}
+      UPDATE games SET status = 'running', started_at = now(), seed = ${randomInt(2 ** 31 - 1)},
+        rules_version = ${RULES_VERSION}
       WHERE id = ${gameId}`;
   });
 }

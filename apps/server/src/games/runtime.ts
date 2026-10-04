@@ -1,6 +1,7 @@
 import {
   HOUR,
   LAUNCH_DELAY,
+  RULES_VERSION,
   TICK,
   advance,
   generateMap,
@@ -199,10 +200,21 @@ export class GameRuntime {
   }
 
   private async load(gameId: string): Promise<LiveGame> {
-    const [row] = await this.sql<{ seed: number | null; speed: number; startedAt: Date | null; status: string }[]>`
-      SELECT seed, speed, started_at, status FROM games WHERE id = ${gameId}`;
+    const [row] = await this.sql<
+      { seed: number | null; speed: number; startedAt: Date | null; status: string; rulesVersion: number | null }[]
+    >`SELECT seed, speed, started_at, status, rules_version FROM games WHERE id = ${gameId}`;
     if (!row) throw new GameError('Game not found.');
     if (row.status === 'lobby' || row.seed === null || !row.startedAt) throw new GameError('This game has not started yet.');
+    if (row.rulesVersion !== RULES_VERSION) {
+      // Replaying under different rules would silently rewrite the game, so
+      // end it instead (see RULES_VERSION in the engine).
+      await this.sql`
+        UPDATE games SET status = 'finished', finished_at = now(), end_reason = 'rulesChanged'
+        WHERE id = ${gameId} AND status = 'running'`;
+      this.events.emit('lobbyChanged');
+      this.log.warn(`Game ${gameId} uses rules v${row.rulesVersion ?? 0}, engine is v${RULES_VERSION}: ended`);
+      throw new GameError('This game was started under an older version of the rules and has been ended.');
+    }
 
     const players = await this.sql<{ userId: string; username: string; playerId: string }[]>`
       SELECT gp.user_id, u.username, gp.player_id
@@ -325,7 +337,8 @@ export class GameRuntime {
   private async finish(game: LiveGame): Promise<void> {
     game.finished = true;
     await this.sql`
-      UPDATE games SET status = 'finished', finished_at = now(), winner = ${game.state.winner}
+      UPDATE games SET status = 'finished', finished_at = now(), winner = ${game.state.winner},
+        end_reason = ${game.state.winner ? 'won' : 'draw'}
       WHERE id = ${game.id} AND status = 'running'`;
     this.events.emit('lobbyChanged');
     this.log.info(`Game ${game.id} ended: ${game.state.winner ? `won by ${game.state.winner}` : 'draw'}`);

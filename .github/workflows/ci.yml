@@ -1,0 +1,69 @@
+# Runs the checks in CLAUDE.md and docs/handoff.md §7 on pushes to main and PRs, so the
+# three workspaces can't drift apart without anyone noticing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # The server's DB-backed tests create throwaway sub_test_* databases and
+    # skip themselves when Postgres isn't reachable, so a run without this
+    # service would silently skip 18 of them.
+    services:
+      db:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: subterfuge
+          POSTGRES_PASSWORD: subterfuge
+          POSTGRES_DB: subterfuge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U subterfuge -d subterfuge"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://subterfuge:subterfuge@localhost:5432/subterfuge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Fails if one-call, chunked and tick-by-tick replays diverge. It prints
+      # timings but doesn't assert them; compare against docs/engine.md.
+      - run: node packages/engine/bench/replay-bench.mjs
+      # A real 2-player game, played through HTTP and Socket.IO against a real
+      # server: register, create, join, start, launch a sub and wait for it to
+      # arrive, with fog of war intact.
+      - run: |
+          npm run build -w @subterfuge/engine
+          (cd apps/server && node src/main.ts & echo $! > /tmp/server.pid)
+          # /api/health needs no session (unlike /api/games), so it's the
+          # right readiness probe. Fail the step if the server never comes up.
+          up=0
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:3000/api/health; then up=1; break; fi
+            sleep 1
+          done
+          if [ "$up" != 1 ]; then echo "server did not start"; exit 1; fi
+          SMOKE_TIMEOUT_MS=300000 node scripts/smoke.mjs
+      - if: always()
+        run: kill $(cat /tmp/server.pid) || true
+
+  docker:
+    # The image compiles the engine and the Angular bundle, then ships the
+    # server's TypeScript directly. That only breaks here, never in `npm test`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t subterfuge-reignited:test .

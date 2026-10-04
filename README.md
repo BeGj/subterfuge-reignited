@@ -55,6 +55,7 @@ goal.md            The game rules we're implementing, with sources
 | [docs/engine.md](docs/engine.md) | Engine API, units, simulation order, simplifications |
 | [docs/api.md](docs/api.md) | HTTP and Socket.IO API reference |
 | [docs/decisions.md](docs/decisions.md) | Log of technical decisions and their reasons |
+| [docs/handoff.md](docs/handoff.md) | **Picking up the project?** Current state, backlog, open decisions, lessons learned |
 
 ## Status
 
