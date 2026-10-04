@@ -24,13 +24,18 @@ export function scrubHorizon(liveMinute: number, predictions: readonly ArrivalPr
 }
 
 /**
- * When an order issued while looking at `scrubMinute` should execute: at the
- * scrubbed tick, but never before the server allows (next tick, plus the
- * launch delay for launches).
+ * When an order issued while looking at `scrubMinute` should execute.
+ *
+ * The map shows the state *after* tick `tickOf(scrubMinute)` (including that
+ * tick's arrivals), but an order scheduled for tick T runs at the *start* of
+ * T, before T's arrivals. So the order runs one tick later, which makes it act
+ * on exactly what's on screen. Example: jump to your sub's arrival, then
+ * launch the arrived drillers onward. Never earlier than the server allows
+ * (next tick, plus the launch delay for launches).
  */
 export function scheduledAt(scrubMinute: number, liveMinute: number, isLaunch: boolean): number {
   const earliest = tickAtOrAfter(liveMinute + (isLaunch ? LAUNCH_DELAY : 0));
-  return Math.max(tickAtOrAfter(scrubMinute), earliest, tickOf(liveMinute) + TICK);
+  return Math.max(tickOf(scrubMinute) + TICK, earliest, tickOf(liveMinute) + TICK);
 }
 
 /** A prediction seen from your side of the fight. */

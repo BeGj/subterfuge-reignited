@@ -8,7 +8,10 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 **Decision:**
 - The client builds a forecast from its `PlayerView` (`stateFromView`) and runs `advance` forward with its pending orders.
 - While scrubbing forward, the forecast is advanced step by step from the last computed tick. It's rebuilt when the view or the orders change.
-- Orders issued while scrubbed are sent with `at` = the scrubbed tick (never earlier than the server allows), and are checked against the forecast with `validateOrder` first.
+- Orders issued while scrubbed run on the tick **after** the one on screen (never earlier than the server allows), and are checked against the forecast with `validateOrder` first.
+  - The map shows the state after a tick, including its arrivals, but an order for tick T runs at the start of T, before T's arrivals.
+  - Scheduling one tick later makes the order act on exactly what you see. For example: jump to your sub's arrival, then launch the arrived drillers onward.
+  - Found in playtest: scheduling at the arrival tick itself was rejected with "Not enough drillers".
 **Why:**
 - It's the original game's behaviour ("the simulated future only takes into account what you know").
 - It needs no server support beyond scheduled orders, which already existed.

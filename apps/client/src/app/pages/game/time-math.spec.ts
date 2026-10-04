@@ -45,8 +45,9 @@ describe('time rounding', () => {
 });
 
 describe('scheduledAt', () => {
-  it('uses the scrubbed tick', () => {
+  it('runs on the tick after the one on screen, so it sees that tick\'s arrivals', () => {
     expect(scheduledAt(1003, 300, false)).toBe(1010);
+    expect(scheduledAt(1000, 300, true)).toBe(1010);
   });
   it('never schedules before the server allows', () => {
     expect(scheduledAt(301, 300, true)).toBe(300 + LAUNCH_DELAY);

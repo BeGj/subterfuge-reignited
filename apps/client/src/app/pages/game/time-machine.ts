@@ -160,7 +160,8 @@ export class TimeMachine {
     const snap = this.snapshot();
     const at = this.scheduleFor(order);
     if (!snap || at === undefined) return null;
-    // State just before the order's tick, so it sees what will be there.
+    // The state the order will run on: the end of the tick before it, which
+    // is the state on screen (see scheduledAt).
     const state = this.stateAt(snap, this.orders(), Math.max(snap.view.time, at - 10));
     return validateOrder(state, { ...order, at, player: snap.view.you } as Order);
   }
