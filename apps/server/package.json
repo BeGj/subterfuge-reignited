@@ -1,0 +1,25 @@
+{
+  "name": "@subterfuge/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Authoritative game server: Fastify HTTP API + Socket.IO, backed by Postgres.",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node src/main.ts",
+    "migrate": "node --env-file-if-exists=../../.env src/migrate-cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^10.1.5",
+    "@subterfuge/engine": "*",
+    "fastify": "^5.12.5",
+    "postgres": "^3.4.9",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}

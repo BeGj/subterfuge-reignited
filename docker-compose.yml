@@ -1,0 +1,38 @@
+# `docker compose up` runs the whole game at http://localhost:3000.
+# For local development, run just the database with `npm run db:up`
+# and see docs/development.md.
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: subterfuge
+      POSTGRES_PASSWORD: subterfuge # local default only; override in production
+      POSTGRES_DB: subterfuge
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subterfuge -d subterfuge"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://subterfuge:subterfuge@db:5432/subterfuge
+      HOST: 0.0.0.0
+      PORT: 3000
+      COOKIE_SECURE: "false" # set "true" when served over HTTPS
+      TRUST_PROXY: "false" # set when behind your own reverse proxy (see docs/auth.md)
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:

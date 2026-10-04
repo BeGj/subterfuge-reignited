@@ -1,0 +1,28 @@
+{
+  "name": "subterfuge-reignited",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A web-based clone of the strategy game Subterfuge.",
+  "type": "module",
+  "workspaces": [
+    "packages/engine",
+    "apps/server",
+    "apps/client"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build -w @subterfuge/engine && npm run build -w @subterfuge/client",
+    "test": "npm run build -w @subterfuge/engine && npm run test --workspaces --if-present",
+    "typecheck": "npm run build -w @subterfuge/engine && npm run typecheck --workspaces --if-present",
+    "db:up": "docker compose up -d db",
+    "migrate": "npm run migrate -w @subterfuge/server"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.angular
+**/*.tsbuildinfo
+**/coverage
+.git
+.env
+.vscode
+.idea
+*.md

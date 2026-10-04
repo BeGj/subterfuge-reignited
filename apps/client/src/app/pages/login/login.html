@@ -1,0 +1,49 @@
+<main class="card">
+  <h1 class="logo">Subterfuge <span>Reignited</span></h1>
+  <h2>{{ title() }}</h2>
+
+  <form (submit)="onSubmit($event)" novalidate>
+    <label for="username">Username</label>
+    <input
+      id="username"
+      autocomplete="username"
+      [formField]="loginForm.username"
+      [attr.aria-invalid]="loginForm.username().touched() && loginForm.username().invalid()"
+      aria-describedby="username-error"
+    />
+    <p id="username-error" class="field-error">
+      @if (loginForm.username().touched()) {
+        {{ loginForm.username().errors()[0]?.message }}
+      }
+    </p>
+
+    <label for="password">Password</label>
+    <input
+      id="password"
+      type="password"
+      [attr.autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'"
+      [formField]="loginForm.password"
+      [attr.aria-invalid]="loginForm.password().touched() && loginForm.password().invalid()"
+      aria-describedby="password-error"
+    />
+    <p id="password-error" class="field-error">
+      @if (loginForm.password().touched()) {
+        {{ loginForm.password().errors()[0]?.message }}
+      }
+    </p>
+
+    <p class="server-error" role="alert">{{ serverError() }}</p>
+
+    <button type="submit" class="primary" [disabled]="submitting()">
+      {{ submitting() ? 'Please wait…' : title() }}
+    </button>
+  </form>
+
+  <button type="button" class="link" (click)="toggleMode()">
+    @if (mode() === 'login') {
+      New here? Create an account
+    } @else {
+      Already have an account? Log in
+    }
+  </button>
+</main>

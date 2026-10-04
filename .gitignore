@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out-tsc/
+*.tsbuildinfo
+.angular/
+
+# Env (copy .env.example to .env)
+.env
+
+# Test / coverage
+coverage/
+__screenshots__/
+
+# IDEs and editors
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Logs
+npm-debug.log*
+
+# System files
+.DS_Store
+Thumbs.db
