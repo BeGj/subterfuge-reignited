@@ -5,11 +5,27 @@ import { Realtime } from './core/realtime';
 @Component({
   imports: [RouterOutlet],
   selector: 'sub-root',
+  host: {
+    // Browsers throttle background tabs and drop sockets on network changes;
+    // reconnect as soon as the page is visible or online again.
+    '(document:visibilitychange)': 'realtime.nudge()',
+    '(window:online)': 'realtime.nudge()',
+  },
   template: `
-    @if (realtime.updateAvailable()) {
+    @if (realtime.sessionExpired()) {
+      <div class="update" role="alert">
+        <span>Your session has ended. Please log in again.</span>
+        <button type="button" class="primary" (click)="goToLogin()">Log in</button>
+      </div>
+    } @else if (realtime.updateAvailable()) {
       <div class="update" role="alert">
         <span>The game has been updated. Refresh to load the new version.</span>
         <button type="button" class="primary" (click)="reload()">Refresh</button>
+      </div>
+    } @else if (realtime.stuck()) {
+      <div class="update" role="alert">
+        <span>Can't reach the server. Still trying to reconnect…</span>
+        <button type="button" class="primary" (click)="reload()">Reload page</button>
       </div>
     }
     <router-outlet />
@@ -38,5 +54,10 @@ export class App {
 
   protected reload(): void {
     location.reload();
+  }
+
+  protected goToLogin(): void {
+    // A full load resets the cached session state in Auth.
+    location.assign('/login');
   }
 }

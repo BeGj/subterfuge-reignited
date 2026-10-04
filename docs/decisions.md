@@ -4,6 +4,14 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — The client never sits silently on "connecting…"
+**Decision:**
+- The server refuses sockets with `unauthorized` (no valid session) or `unavailable` (the session lookup failed, e.g. during a deploy). The codes are listed in `CONNECT_ERRORS`.
+- Socket.IO doesn't retry refused connections, so the client does it: `unavailable` → retry with backoff (1, 2, 4… up to 10 s); `unauthorized` → "Your session has ended. Log in again".
+- When a tab becomes visible again or the network comes back, the client reconnects at once.
+- After 15 s without a connection it shows "Can't reach the server…" with a Reload button. The countdown starts when the connection is first lost; retries don't restart it.
+**Why:** a playtester's tab stuck on "connecting…" after a deploy, with no update banner. A refused or throttled reconnect left no visible way out. All three paths (outage, new version, expired session) were verified in a browser by stopping, redeploying and invalidating the session.
+
 ### 2026-10-04 — Enemy launches are visible shortly before they happen
 **Decision:** another player's launch order is shown when it's within `IMMINENT_LAUNCH_WINDOW` (= launch delay + one tick = 20 game minutes) of executing, if you'd see the sub once launched. That means it leaves from inside your sonar, or it's heading for one of your outposts. It's drawn as a warning route, listed on the target outpost, and fed into your forecast and battle predictions.
 **Why:** playtest request: players should get a heads-up, and testing a strategy "now" should carry a risk of being seen even though the order is still cancellable. Scheduled orders stay secret until they get close, so the time machine is still useful for planning.

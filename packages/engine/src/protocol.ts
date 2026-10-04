@@ -120,6 +120,13 @@ export interface IssueOrderRequest {
   at?: GameTime;
 }
 
+/**
+ * Why the server refused a Socket.IO connection (the `connect_error`
+ * message). Socket.IO doesn't retry refused connections by itself, so the
+ * client must: `unauthorized` → log in again; `unavailable` → retry soon.
+ */
+export const CONNECT_ERRORS = { unauthorized: 'unauthorized', unavailable: 'unavailable' } as const;
+
 /** Events the server sends to the client over Socket.IO. */
 export interface ServerToClientEvents {
   /**

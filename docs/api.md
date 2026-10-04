@@ -33,6 +33,7 @@ The client connects on the same origin, and the handshake is authenticated with 
 ### Server → client
 | Event | Payload | When |
 |---|---|---|
+| `connect_error` | `unauthorized` or `unavailable` (`CONNECT_ERRORS`) | Connection refused. Socket.IO won't retry these by itself: log in again, or retry later |
 | `hello` | `{ user, serverTime, clientBuild }` | On every (re)connect. `clientBuild` is the served client's bundle hash (`null` in dev); a client running a different build shows "refresh to update" |
 | `lobbyChanged` | – | Any game was created, joined, left, started, deleted or finished. Refetch `GET /api/games` |
 | `gameUpdate` | `GameSnapshot` | To each player of a watched game: every tick, and after their own orders change |

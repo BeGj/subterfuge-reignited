@@ -1,5 +1,6 @@
 import { Service, signal } from '@angular/core';
 import { io, type Socket } from 'socket.io-client';
+import { CONNECT_ERRORS } from '@subterfuge/engine';
 import type {
   ClientToServerEvents,
   GameSnapshot,
@@ -9,6 +10,14 @@ import type {
 } from '@subterfuge/engine';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
+
+/** How long "connecting…" may last before the app offers a reload. */
+export const STUCK_AFTER_MS = 15_000;
+
+/** Backoff for retrying refused connections: 1 s, 2 s, 4 s … capped at 10 s. */
+export function retryDelay(attempt: number): number {
+  return Math.min(10_000, 1000 * 2 ** attempt);
+}
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -25,6 +34,16 @@ export class Realtime {
 
   private readonly statusSignal = signal<ConnectionStatus>('disconnected');
   private readonly updateSignal = signal(false);
+  private readonly stuckSignal = signal(false);
+  private readonly expiredSignal = signal(false);
+  private stuckTimer: ReturnType<typeof setTimeout> | undefined;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private retries = 0;
+
+  /** Still not connected after `STUCK_AFTER_MS`; the app offers a reload. */
+  readonly stuck = this.stuckSignal.asReadonly();
+  /** The server says the session is no longer valid; the app asks to log in. */
+  readonly sessionExpired = this.expiredSignal.asReadonly();
 
   /**
    * The server serves a newer client than this page runs (the game was
@@ -39,15 +58,27 @@ export class Realtime {
 
   connect(): void {
     if (this.socket) return;
-    this.statusSignal.set('connecting');
+    this.setStatus('connecting');
     const socket: GameSocket = io({ withCredentials: true });
     socket.on('connect', () => {
-      this.statusSignal.set('connected');
+      this.retries = 0;
+      this.setStatus('connected');
       // Rooms are per connection: re-subscribe to watched games after a reconnect.
       for (const gameId of this.gameListeners.keys()) this.rewatch(gameId);
     });
-    socket.on('disconnect', () => this.statusSignal.set('connecting'));
-    socket.on('connect_error', () => this.statusSignal.set('connecting'));
+    socket.on('disconnect', () => this.setStatus('connecting'));
+    socket.on('connect_error', (err) => {
+      this.setStatus('connecting');
+      // Socket.IO retries network failures by itself (socket.active), but
+      // not connections the server refused. Handle those here, or the page
+      // would sit on "connecting…" forever.
+      if (socket.active) return;
+      if (err.message === CONNECT_ERRORS.unauthorized) {
+        this.expiredSignal.set(true);
+        return;
+      }
+      this.scheduleRetry();
+    });
     socket.on('hello', ({ serverTime, clientBuild }) => {
       this.serverTimeSignal.set(serverTime);
       if (isOutdated(runningBuild(), clientBuild)) this.updateSignal.set(true);
@@ -58,9 +89,38 @@ export class Realtime {
   }
 
   disconnect(): void {
+    clearTimeout(this.retryTimer);
     this.socket?.disconnect();
     this.socket = undefined;
-    this.statusSignal.set('disconnected');
+    this.setStatus('disconnected');
+  }
+
+  /** Reconnect right away if we're not connected (tab shown again, network back). */
+  nudge(): void {
+    if (this.socket && !this.socket.connected && !this.expiredSignal()) this.socket.connect();
+  }
+
+  private scheduleRetry(): void {
+    clearTimeout(this.retryTimer);
+    const delay = retryDelay(this.retries++);
+    this.retryTimer = setTimeout(() => this.socket?.connect(), delay);
+  }
+
+  private setStatus(status: ConnectionStatus): void {
+    const previous = this.statusSignal();
+    this.statusSignal.set(status);
+    if (status === 'connecting') {
+      // Start the countdown only when the connection is first lost: every
+      // failed retry reports "connecting" again and must not restart it,
+      // or the stuck banner would never appear while retries keep failing.
+      if (previous !== 'connecting') {
+        clearTimeout(this.stuckTimer);
+        this.stuckTimer = setTimeout(() => this.stuckSignal.set(true), STUCK_AFTER_MS);
+      }
+    } else {
+      clearTimeout(this.stuckTimer);
+      this.stuckSignal.set(false);
+    }
   }
 
   ping(): void {

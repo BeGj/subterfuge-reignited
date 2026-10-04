@@ -27,7 +27,15 @@ export function createRealtime(
 
   io.use(async (socket, next) => {
     const cookies = fastifyCookie.parse(socket.request.headers.cookie ?? '');
-    const user = await findSessionUser(sql, cookies[SESSION_COOKIE]).catch(() => null);
+    let user: PublicUser | null;
+    try {
+      user = await findSessionUser(sql, cookies[SESSION_COOKIE]);
+    } catch {
+      // A failed lookup (e.g. the database is briefly unavailable during a
+      // deploy) is not a bad session: tell the client to retry instead of
+      // sending it to the login page. See CONNECT_ERRORS in the protocol.
+      return next(new Error('unavailable'));
+    }
     if (!user) return next(new Error('unauthorized'));
     socket.data.user = user;
     next();
