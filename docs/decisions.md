@@ -4,6 +4,15 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — Shield ratio decided; shields drawn as rings of 10
+**Decision:**
+- 1/3 of outposts have a max shield of 20 and the rest 10 (`STRONG_SHIELD_SHARE`, unchanged). This is the user's call.
+- The client draws one ring per 10 of maximum shield (a 10-shield has 1 ring, a 20-shield 2, and the Queen's +20 adds 2 more), filling from the innermost ring outwards.
+- Map and panel use the effective maximum, including the Queen.
+**Why:**
+- User request.
+- It also fixed a display bug: the view's `shieldMax` excludes the Queen bonus, so the old single arc overflowed when the Queen was at an outpost.
+
 ### 2026-10-04 — Adding an order kind doesn't need a rules version bump
 **Decision:** `voteEnd` was added without bumping `RULES_VERSION`.
 **Why:** the bump exists so replaying *existing* order logs can't produce different results. Old logs contain no `voteEnd` orders, so their replays are byte-identical; the new `endVotes` field is just `[]`. Bump only when existing inputs would replay differently.

@@ -7,6 +7,7 @@ import { formatDuration, formatGameTime, plannedTripLabel } from '../format';
 import { travelMinutes } from '../geometry';
 import { estimatedLaunchAt } from '../overlays';
 import { TimeMachine } from '../time-machine';
+import { effectiveShieldMax } from '../shield-rings';
 import { outcomeFor, outcomeSummary } from '../time-math';
 
 const TYPE_LABELS: Record<string, string> = { factory: 'Factory', generator: 'Generator', mine: 'Mine' };
@@ -60,6 +61,9 @@ export class OutpostPanel {
   private readonly boardable = computed(() =>
     this.specialistsHere().filter((s) => s.owner === this.view().you && s.captiveOf === null),
   );
+
+  /** Shield maximum including the Queen's bonus. */
+  protected readonly shieldMax = computed(() => effectiveShieldMax(this.view(), this.outpost()));
 
   protected readonly drillCost = computed(() => {
     const me = this.view().players.find((p) => p.id === this.view().you);

@@ -56,7 +56,7 @@ There are **3 types of outposts: Factory, Generator and Mine**. The map only gen
 All outposts have a "regenerating shield".
 - Max charge is **10 (weak)** or **20 (strong)**, decided at map generation and fixed for that outpost. Specialists can raise or lower it.
 - *Our design:* a third of outposts have max 20 and the rest have max 10 (random modifier).
-  - ⚠️ The official sources disagree on this ratio. The wiki outpost page says 10-shield outposts are more common, which matches our 1/3 choice. A developer quote on the wiki says the shield deck is 33% weak (10) and 67% strong (20). Treat the ratio as a tunable constant.
+  - Decided: 1/3 strong (20), 2/3 weak (10). The sources disagree (a developer quote says 2/3 strong), but this matches the wiki outpost page and the user's choice. It's `STRONG_SHIELD_SHARE`.
 - Shields take **48 hours to charge from 0 to full, whatever the max**. A 20-shield outpost therefore gains ~0.42/h and a 10-shield outpost ~0.21/h.
 - All shields **start the game at 0**.
 - The owner can **turn the shield off** and back on. This is useful when trading or gifting an outpost. *Our implementation:* turning it off drops the charge to 0 and stops charging; turning it on recharges from 0 (see `docs/engine.md`).
@@ -234,11 +234,11 @@ This is a summary. For details see [docs/architecture.md](docs/architecture.md),
 
 ### Open questions for our clone
 Still open:
-- Shield ratio: 1/3 strong (our current choice) or 2/3 strong (developer quote)?
 - Which specialists to include in v1? Suggestion: Queen, Princess, Helmsman, Lieutenant/General, Inspector/Security Chief, Foreman, Thief, Navigator, Intelligence Officer. Add the complex ones (Martyr, Double Agent, Pirate, Hypnotist, Revered Elder) later.
 - Domination mode: include in v1, and what outpost target per player count?
 
 Answered (details in `docs/`):
+- **Shield ratio:** 1/3 of outposts have max 20, the rest max 10 (decided by the user; the developer quote of 2/3 is not used).
 - **Time scale:** both. Per-game speed presets: real time, 60× and 240× (`GAME_SPEEDS`).
 - **Shield after capture:** an attacker only wins once the shield is drained, so a captured outpost starts at 0 charge and recharges from there.
 - **Distance scale:** map units with `SUB_SPEED` = 1 unit per game minute. Every map is 4000 units square, so neighbouring outposts are about 6.3 travel-hours apart at 10 players and 9.5 h at 2. Sonar is 1620 units (27 h). See `docs/engine.md` and `npm run map:stats -w @subterfuge/engine`.

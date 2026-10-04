@@ -66,12 +66,12 @@ Only the Queen exists today. Specialists are where most of Subterfuge's strategy
 
 ## Open decisions (need the user)
 
-- **Shield ratio:** 1/3 strong (current, `STRONG_SHIELD_SHARE`) or 2/3 strong (developer quote)?
 - **First specialist batch:** is the list above right?
 - **Domination mode:** build it? If so, what outpost target per player count?
 
 ## Done (most recent first)
 
+- **Shield rings:** one ring per 10 shield (10 → 1 ring, 20 → 2, more with the Queen's +20), filling from the inside out. The shield ratio is decided: 1/3 of outposts have 20, the rest 10.
 - **End a game by agreement:** a `voteEnd` order (propose or withdraw). The game ends with no winner once everyone still playing agrees; the lobby shows "Ended by agreement" (migration 005). Additive, so no rules version bump.
 - **Lobby clean-up:** "Open games" lists only joinable (not full) games. The smoke test ends its own game, and its fog check runs with owners hidden.
 - **Unload idle finished games:** dropped from memory after 10 minutes unviewed, and reloaded on demand.

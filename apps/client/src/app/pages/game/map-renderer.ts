@@ -3,6 +3,7 @@ import { toScreen, type Camera, type Viewport } from './camera';
 import { DORMANT_COLOR, UNKNOWN_COLOR, playerColor } from './colors';
 import { formatDuration, formatGameTime, plannedTripLabel } from './format';
 import { subPositionAt, travelMinutes } from './geometry';
+import { effectiveShieldMax, shieldRingFill } from './shield-rings';
 import { badgeCenter, estimatedLaunchAt, type OrderMarker } from './overlays';
 import { isSelected, type Selection } from './selection';
 
@@ -45,6 +46,8 @@ const TEXT = '#e3eef6';
 const MUTED = '#9bb6c9';
 const ACCENT = '#4fd1c5';
 const SHIELD = '#7fb8ff';
+/** Distance between shield rings, in pixels. */
+const RING_GAP = 3.5;
 const OUTPOST_RADIUS = 9;
 
 /** Where each visible sub is this frame (map coordinates). */
@@ -283,24 +286,31 @@ function drawOutpost(
   const color = outpost.owner === undefined ? UNKNOWN_COLOR : outpost.owner === null ? DORMANT_COLOR : playerColor(view, outpost.owner);
   const mine = outpost.owner === view.you;
 
-  // Selection / hover / target rings.
-  if (opts.selected || outpost.id === scene.launchTargetId) {
-    ring(ctx, p, r + 9, ACCENT, 2);
-  } else if (isSelected(scene.hover, 'outpost', outpost.id)) {
-    ring(ctx, p, r + 9, withAlpha(TEXT, 0.5), 1.5);
+  // Shield: one ring per 10 charge (10 → 1 ring, 20 → 2, more with the
+  // Queen), each a dim track with a bright arc, filling inner to outer.
+  let outer = r + 4;
+  const max = effectiveShieldMax(scene.view, outpost);
+  if (max !== undefined && outpost.shieldCharge !== undefined) {
+    const fills = shieldRingFill(outpost.shieldEnabled === false ? 0 : outpost.shieldCharge, max);
+    fills.forEach((fill, i) => {
+      const radius = r + 4 + i * RING_GAP;
+      ring(ctx, p, radius, withAlpha(SHIELD, 0.18), 2);
+      if (fill > 0) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, -Math.PI / 2, -Math.PI / 2 + fill * Math.PI * 2);
+        ctx.strokeStyle = SHIELD;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      outer = radius;
+    });
   }
 
-  // Shield arc: dim full ring, bright arc for the current charge.
-  if (outpost.shieldMax !== undefined && outpost.shieldCharge !== undefined) {
-    ring(ctx, p, r + 4, withAlpha(SHIELD, 0.18), 2);
-    const fraction = outpost.shieldMax > 0 ? outpost.shieldCharge / outpost.shieldMax : 0;
-    if (fraction > 0 && outpost.shieldEnabled !== false) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r + 4, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2);
-      ctx.strokeStyle = SHIELD;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+  // Selection / hover / target rings, outside the shield rings.
+  if (opts.selected || outpost.id === scene.launchTargetId) {
+    ring(ctx, p, outer + 5, ACCENT, 2);
+  } else if (isSelected(scene.hover, 'outpost', outpost.id)) {
+    ring(ctx, p, outer + 5, withAlpha(TEXT, 0.5), 1.5);
   }
 
   ctx.save();

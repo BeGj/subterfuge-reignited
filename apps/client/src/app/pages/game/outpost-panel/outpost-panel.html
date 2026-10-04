@@ -12,7 +12,10 @@
     @if (outpost().shieldMax !== undefined) {
       <dt>Shield</dt>
       <dd>
-        {{ outpost().shieldCharge }} / {{ outpost().shieldMax }}
+        {{ outpost().shieldCharge }} / {{ shieldMax() }}
+        @if (shieldMax() !== outpost().shieldMax) {
+          <span class="muted">(+20 from the Queen)</span>
+        }
         @if (outpost().shieldEnabled === false) {
           <span class="muted">(off)</span>
         }
