@@ -91,7 +91,7 @@ To reset your local database: `docker compose down -v && npm run db:up`.
 
 - TypeScript strict mode everywhere (`tsconfig.base.json`). The server and engine use `erasableSyntaxOnly`, so no `enum` and no constructor parameter properties.
 - **Server imports use `.ts` extensions** (`import { x } from './y.ts'`) because Node runs the source directly. **Engine imports use `.js`**, because it is compiled with `tsc`.
-- The Angular code follows `apps/client/CLAUDE.md`:
+- The Angular code follows `apps/client/AGENTS.md`:
   - standalone components, signals, `@Service()`
   - Signal Forms
   - native control flow

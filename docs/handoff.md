@@ -1,6 +1,6 @@
 # Handoff: state of the project and what's next
 
-**Read this first if you're picking up the project.** It covers what exists, what was decided, what's still open, and the lessons that will save you time. Last updated: 2026-10-04 (after commit `292c33b`).
+**Read this first if you're picking up the project.** It covers what exists, what was decided, what's still open, and the lessons that will save you time. Last updated: 2026-10-04. The project was built with Claude Code, and this doc is written so any agent harness can continue it. Run `git log --oneline` for the history.
 
 ## 1. Where things stand
 
@@ -17,16 +17,16 @@ Games survive server restarts. Everything runs with `docker compose up` (see [RE
 | Rules engine | Map generation; tick simulation (subs, combat, production, shields, mining, eliminations, resign, wins, draws); fog of war | `packages/engine/src/`, [engine.md](engine.md) |
 | Lobby | Create, join, leave, start, delete; keyset pagination | `apps/server/src/games/lobby-*.ts` |
 | Game runtime | In-memory, rebuilt from seed + orders; game time from the wall clock; per-player snapshots over Socket.IO; abuse limits | `apps/server/src/games/runtime.ts`, [architecture.md](architecture.md) |
-| Client | Login, lobby, game screen (canvas map, panels) | `apps/client/src/app/` |
-| Tests | 153: 79 engine (incl. replay determinism), 61 server (20 need Postgres), 13 client (helpers only), plus `npm run smoke` | `npm test` |
+| Client | Login, lobby, game screen (canvas map, panels), time machine (forecast, scheduling, battle predictions), connection and update banners | `apps/client/src/app/` |
+| Tests | About 215: engine (incl. replay determinism), server (DB tests need Postgres, they skip without it), client (helpers, time machine), plus `npm run smoke` (a real 2-player game over the network) | `npm test`, `npm run smoke` |
 | CI | Pushes to `main` and PRs: typecheck, tests with a Postgres service, build, replay bench, Docker build | `.github/workflows/ci.yml` |
-| Docs | README, goal (rules), architecture, engine, API, auth, development, decision log, this file | `docs/` |
+| Docs | README, goal.md (rules), architecture, engine, API, auth, development, decisions, **roadmap** (what's next), this file | `docs/` |
 
-**Only the Queen exists as a specialist.** Hiring, the other 27 specialists, the time machine, chat, funding and domination mode are not built.
+**Only the Queen exists as a specialist.** Hiring, the other 27 specialists, chat, funding and domination mode are not built. The next steps are in [roadmap.md](roadmap.md).
 
 ## 2. Read these, in this order
 
-1. [`CLAUDE.md`](../CLAUDE.md): project rules for agents (short).
+1. [`AGENTS.md`](../AGENTS.md): project rules for agents (short). `CLAUDE.md` just imports it.
 2. [`goal.md`](../goal.md): the official game rules we follow, with sources.
 3. [`docs/architecture.md`](architecture.md): how the pieces fit together and the principles.
 4. [`docs/engine.md`](engine.md): engine API, units, tick order, **every simplification compared to the official rules**, and performance.
@@ -44,7 +44,7 @@ These come from the user, or are load-bearing for the architecture:
 - **The server is authoritative** and filters what each player sees (`viewFor`). The only deliberately public data is the leaderboard (`PlayerPublic`).
 - **Migrations are append-only.** Add `apps/server/migrations/NNN_name.sql`; never edit an applied one.
 - **Keep the docs current:** the README status, the relevant `docs/*.md`, and `docs/decisions.md` for any non-obvious choice. Update this handoff file when priorities change.
-- **Commits:** only when the user asks. End messages with the Co-Authored-By line given in the session.
+- **Commits:** only when the user asks. Earlier commits carry a `Co-Authored-By: Claude` trailer; use whatever attribution your harness expects.
 
 ## 4. Backlog
 
@@ -56,7 +56,7 @@ Listed in [roadmap.md → Open decisions](roadmap.md#open-decisions-need-the-use
 
 ## 6. How work has been done (lessons for agents)
 
-**Parallel agents, contracts first.** This worked well. The main session writes the types and stub signatures (throwing "not implemented"), then gives each agent **exclusive file ownership**. Tell agents:
+**Parallel agents, contracts first.** This worked well. If your harness has no sub-agents, follow the same order on your own: contracts first, then one area at a time. The main session writes the types and stub signatures (throwing "not implemented"), then gives each agent **exclusive file ownership**. Tell agents:
 - not to edit shared contract files, and to report needed contract changes instead
 - to verify with `vitest` and `tsc`
 - not to commit
@@ -80,7 +80,26 @@ Listed in [roadmap.md → Open decisions](roadmap.md#open-decisions-need-the-use
 **Local state (dev machine only):**
 - The original developer's local DB volume has a few test users and games. Don't rely on them: register your own accounts through the UI, or wipe everything with `docker compose down -v`.
 
-## 7. Verification checklist before handing back
+## 7. Verifying changes without touching the live game
+
+The user playtests on `docker compose up` (port 3000, database volume `db-data`). Don't create test accounts or games there. Use an isolated server and database instead:
+
+```sh
+npm run db:up
+docker compose exec -T db psql -U subterfuge -c "DROP DATABASE IF EXISTS sub_verify WITH (FORCE);" -c "CREATE DATABASE sub_verify;"
+npm run build                      # engine + production client (served by the server)
+(cd apps/server && PORT=3001 DATABASE_URL=postgres://subterfuge:subterfuge@localhost:5432/sub_verify node src/main.ts) &
+BASE_URL=http://127.0.0.1:3001 npm run smoke     # ~2–4 min at blitz speed
+# Browser checks: open http://localhost:3001 (two accounts in a normal + private window).
+# Clean up:
+pkill -f "node src/main.ts"; docker compose exec -T db psql -U subterfuge -c "DROP DATABASE sub_verify WITH (FORCE);"
+```
+
+- **Deploying to the user's instance:** `docker compose up -d --build --wait`. Open pages show "The game has been updated. Refresh".
+- **If you changed map or simulation results:** bump `RULES_VERSION` first. Running games started under other rules are ended on deploy ("Ended: the rules were updated"), so warn the user.
+- **Browser automation note:** background or unfocused tabs throttle timers and animation frames, so animations and countdowns may not advance under automation. Unit-test those with fake timers (see `time-machine.spec.ts` and `realtime-stuck.spec.ts`).
+
+## 8. Verification checklist before handing back
 
 1. `npm test`, `npm run typecheck` and `npm run build` all pass (with `npm run db:up` so the DB tests run).
 2. For engine changes: `replay.test.ts` passes, and the benchmark (`node packages/engine/bench/replay-bench.mjs`) hasn't regressed badly.
