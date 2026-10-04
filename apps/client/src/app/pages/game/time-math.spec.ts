@@ -144,6 +144,7 @@ const view: PlayerView = {
   specialists: [],
   winner: null,
   endedAt: null,
+  endVotes: [],
 };
 
 describe('maskUnknown', () => {

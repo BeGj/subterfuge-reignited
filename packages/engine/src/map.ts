@@ -332,5 +332,6 @@ function buildState(c: Candidate, options: GenerateMapOptions, rng: Random, size
     nextId,
     winner: null,
     endedAt: null,
+    endVotes: [],
   };
 }

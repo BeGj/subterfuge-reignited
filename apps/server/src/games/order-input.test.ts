@@ -16,6 +16,8 @@ describe('parseOrderInput', () => {
     });
     expect(parseOrderInput({ kind: 'drillMine', outpost: 'o-1' })).toEqual({ kind: 'drillMine', outpost: 'o-1' });
     expect(parseOrderInput({ kind: 'resign', player: 'p2' })).toEqual({ kind: 'resign' });
+    expect(parseOrderInput({ kind: 'voteEnd', agree: true })).toEqual({ kind: 'voteEnd', agree: true });
+    expect(typeof parseOrderInput({ kind: 'voteEnd', agree: 'yes' })).toBe('string');
     expect(parseOrderInput({ kind: 'setShield', outpost: 'o-1', enabled: false })).toEqual({
       kind: 'setShield',
       outpost: 'o-1',

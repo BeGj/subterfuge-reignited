@@ -47,6 +47,7 @@ function makeState(): GameState {
     nextId: 4,
     winner: null,
     endedAt: null,
+    endVotes: [],
   };
 }
 

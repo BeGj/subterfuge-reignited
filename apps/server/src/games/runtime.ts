@@ -66,6 +66,8 @@ interface LiveGame {
   publishedTime: GameTime;
   /** Real time (ms) someone last looked at or acted in this game; see FINISHED_IDLE_UNLOAD_MS. */
   lastActiveMs: number;
+  /** The game ended because everyone remaining agreed (for `games.end_reason`). */
+  endedByAgreement: boolean;
 }
 
 /** Delivers a snapshot to one player's sockets. Wired to Socket.IO in main.ts. */
@@ -274,6 +276,7 @@ export class GameRuntime {
       busy: 0,
       publishedTime: -1,
       lastActiveMs: this.now(),
+      endedByAgreement: false,
     };
     // Replay everything up to now. Events from the replay are kept so
     // reconnecting players still see recent history.
@@ -312,6 +315,7 @@ export class GameRuntime {
     }
     for (const event of result.events) {
       if (event.kind === 'playerEliminated') this.dropOrdersOf(game, event.player);
+      if (event.kind === 'gameDrawn' && event.reason === 'agreed') game.endedByAgreement = true;
     }
     return true;
   }
@@ -378,7 +382,7 @@ export class GameRuntime {
     game.lastActiveMs = this.now();
     await this.sql`
       UPDATE games SET status = 'finished', finished_at = now(), winner = ${game.state.winner},
-        end_reason = ${game.state.winner ? 'won' : 'draw'}
+        end_reason = ${game.state.winner ? 'won' : game.endedByAgreement ? 'agreed' : 'draw'}
       WHERE id = ${game.id} AND status = 'running'`;
     this.events.emit('lobbyChanged');
     this.log.info(`Game ${game.id} ended: ${game.state.winner ? `won by ${game.state.winner}` : 'draw'}`);
@@ -454,6 +458,7 @@ export function eventVisibleTo(event: GameEvent, player: PlayerId): boolean {
     case 'playerEliminated':
     case 'gameWon':
     case 'gameDrawn':
+    case 'endVote': // votes are public to everyone in the game
       return true;
   }
 }

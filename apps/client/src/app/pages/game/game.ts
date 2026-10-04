@@ -136,6 +136,25 @@ export class Game {
     const me = view?.players.find((p) => p.id === view.you);
     return !!view && view.endedAt == null && !!me && !me.eliminated;
   });
+  /** Players still in the game, and who of them agrees to end it. */
+  protected readonly endVote = computed(() => {
+    const view = this.snapshot()?.view;
+    if (!view || view.endedAt != null) return null;
+    const alive = view.players.filter((p) => !p.eliminated);
+    const agreed = alive.filter((p) => view.endVotes.includes(p.id));
+    const youAgree = view.endVotes.includes(view.you);
+    const pending = this.snapshot()!.pendingOrders.find((p) => p.order.kind === 'voteEnd');
+    return {
+      youAgree,
+      /** A vote order you sent that hasn't taken effect yet. */
+      pending: !!pending,
+      text:
+        agreed.length === 0
+          ? 'Nobody has proposed ending the game.'
+          : `${agreed.map((p) => (p.id === view.you ? 'You' : p.name)).join(', ')} ${agreed.length === 1 && !youAgree ? 'wants' : 'want'} to end it (${agreed.length} of ${alive.length}).`,
+    };
+  });
+  protected readonly voteError = signal('');
   protected readonly confirmingResign = signal(false);
   protected readonly resignError = signal('');
 
@@ -196,6 +215,16 @@ export class Game {
   protected orderReplaced(orderId: string): void {
     this.cancelLaunch();
     this.selection.set({ kind: 'order', id: orderId });
+  }
+
+  /** Propose ending the game with no winner, or withdraw the proposal. */
+  protected async voteEnd(agree: boolean): Promise<void> {
+    this.voteError.set('');
+    try {
+      await this.realtime.issueOrder({ gameId: this.id(), order: { kind: 'voteEnd', agree } });
+    } catch (err) {
+      this.voteError.set(err instanceof Error ? err.message : apiErrorMessage(err));
+    }
   }
 
   protected async resign(): Promise<void> {

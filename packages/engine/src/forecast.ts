@@ -79,6 +79,7 @@ export function stateFromView(view: PlayerView): GameState {
     nextId: FORECAST_ID_BASE,
     winner: view.winner,
     endedAt: view.endedAt,
+    endVotes: [...(view.endVotes ?? [])],
   };
 }
 

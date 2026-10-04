@@ -2,23 +2,9 @@
 
 This is the one list of what's next, in order. Update it when an item is done or priorities change: move finished items to **Done** with a one-line note. Design details that are already agreed live with each item; the reasons behind decisions go in [decisions.md](decisions.md).
 
-## Now: short items
+## Now
 
-### 1. End a stale game by agreement
-- **Problem:** a running game only ends by a win, a draw, or everyone else resigning.
-- **Agreed design:**
-  - An engine **order** `voteEnd`, with a way to withdraw the vote. It must be an order so replays agree.
-  - When every non-eliminated player has voted, the engine ends the game with no winner (the draw path), and the runtime marks it finished.
-  - No new database status is needed, but this changes simulation results, so **bump `RULES_VERSION`**.
-  - Not creator-only: a losing creator could otherwise wipe out everyone else's game. A player who refuses can still be bypassed by others resigning.
-- **Client:** "Propose ending the game" next to Resign, showing who has agreed. Votes are public to the game's players.
-
-### 2. Clean up the lobby
-- **Problem:** full or stale games clutter "Open games", e.g. smoke-test games whose start step never ran.
-- **Plan:**
-  - "Open games" lists only games you can actually join (not full).
-  - The smoke test deletes its game when it ends. If it fails part-way, the game stays and is labelled with the run's timestamp.
-  - Optionally, a creator can delete a lobby game that has sat unstarted for N days.
+Nothing queued. Next up is specialists.
 
 ## Next: specialists (the main missing game feature)
 
@@ -86,6 +72,8 @@ Only the Queen exists today. Specialists are where most of Subterfuge's strategy
 
 ## Done (most recent first)
 
+- **End a game by agreement:** a `voteEnd` order (propose or withdraw). The game ends with no winner once everyone still playing agrees; the lobby shows "Ended by agreement" (migration 005). Additive, so no rules version bump.
+- **Lobby clean-up:** "Open games" lists only joinable (not full) games. The smoke test ends its own game, and its fog check runs with owners hidden.
 - **Unload idle finished games:** dropped from memory after 10 minutes unviewed, and reloaded on demand.
 - **Connection robustness:** the client never sits silently on "connecting…". It shows a "can't reach the server" banner, retries refused connections, and asks to log in again when the session has expired.
 - **Playtest round 2:**

@@ -52,7 +52,7 @@ export interface GameSummary {
  * `rulesChanged`: the game was started under older rules (see
  * `RULES_VERSION`) and was ended instead of being replayed incorrectly.
  */
-export type GameEndReason = 'won' | 'draw' | 'rulesChanged';
+export type GameEndReason = 'won' | 'draw' | 'agreed' | 'rulesChanged';
 
 export interface CreateGameRequest {
   name: string;

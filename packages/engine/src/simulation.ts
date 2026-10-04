@@ -177,6 +177,8 @@ export function validateOrder(state: GameState, order: Order): string | null {
     }
     case 'resign':
       return null;
+    case 'voteEnd':
+      return null;
   }
 }
 
@@ -253,6 +255,13 @@ function executeOrder(state: GameState, order: Order, events: GameEvent[]): void
     case 'resign':
       eliminate(state, order.player, events, 'resigned');
       return;
+    case 'voteEnd': {
+      const has = state.endVotes.includes(order.player);
+      if (order.agree === has) return; // no change
+      state.endVotes = order.agree ? [...state.endVotes, order.player] : state.endVotes.filter((p) => p !== order.player);
+      events.push({ kind: 'endVote', at: state.time, player: order.player, agree: order.agree });
+      return;
+    }
   }
 }
 
@@ -562,7 +571,11 @@ function checkWin(state: GameState, events: GameEvent[]): void {
     events.push({ kind: 'gameWon', at: state.time, player: alive[0]!.id, reason: 'lastStanding' });
   } else if (alive.length === 0 && state.players.length > 1) {
     state.endedAt = state.time;
-    events.push({ kind: 'gameDrawn', at: state.time });
+    events.push({ kind: 'gameDrawn', at: state.time, reason: 'eliminated' });
+  } else if (alive.length > 0 && alive.every((p) => state.endVotes.includes(p.id))) {
+    // Everyone still in the game agreed to end it: no winner.
+    state.endedAt = state.time;
+    events.push({ kind: 'gameDrawn', at: state.time, reason: 'agreed' });
   }
 }
 

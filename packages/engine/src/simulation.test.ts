@@ -50,6 +50,7 @@ function makeState(over: Partial<GameState> = {}): GameState {
     nextId: 1,
     winner: null,
     endedAt: null,
+    endVotes: [],
     ...over,
   };
 }
@@ -378,7 +379,7 @@ describe('game end', () => {
     const { state, events } = advance(s, [], 3 * TICK);
     expect(state.players.every((p) => p.eliminated)).toBe(true);
     expect(state).toMatchObject({ winner: null, endedAt: TICK });
-    expect(events).toContainEqual({ kind: 'gameDrawn', at: TICK });
+    expect(events).toContainEqual({ kind: 'gameDrawn', at: TICK, reason: 'eliminated' });
     expect(events.filter((e) => e.kind === 'gameWon')).toHaveLength(0);
     // Nothing changes after the end.
     expect(advance(state, [], 100 * TICK).state).toEqual({ ...state, time: 100 * TICK });
@@ -447,5 +448,27 @@ describe('disabling shields', () => {
   it('switches the shield back on for the new owner after a capture', () => {
     const { state } = advance(makeState(), [setShield('E', false), launch({ player: 'p1', from: 'A', to: 'E', drillers: 6, at: 10 })], 700);
     expect(find(state, 'E').shieldEnabled).toBe(true);
+  });
+});
+
+describe('ending a game by agreement', () => {
+  const vote = (player: string, agree: boolean, at = 10): Order => ({ kind: 'voteEnd', at, player, agree });
+
+  it('ends with no winner once every player still in the game agrees', () => {
+    const { state, events } = advance(makeState(), [vote('p1', true), vote('p2', true, 20)], 30);
+    expect(state).toMatchObject({ winner: null, endedAt: 20 });
+    expect(events).toContainEqual({ kind: 'gameDrawn', at: 20, reason: 'agreed' });
+  });
+
+  it('does not end while someone disagrees, and a vote can be withdrawn', () => {
+    const one = advance(makeState(), [vote('p1', true)], 30).state;
+    expect(one).toMatchObject({ endedAt: null, endVotes: ['p1'] });
+    const withdrawn = advance(makeState(), [vote('p1', true), vote('p1', false, 20), vote('p2', true, 30)], 40).state;
+    expect(withdrawn).toMatchObject({ endedAt: null, endVotes: ['p2'] });
+  });
+
+  it('ignores repeated identical votes', () => {
+    const { events } = advance(makeState(), [vote('p1', true), vote('p1', true, 20)], 30);
+    expect(events.filter((e) => e.kind === 'endVote')).toHaveLength(1);
   });
 });

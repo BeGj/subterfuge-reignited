@@ -28,7 +28,10 @@ export class Lobby {
   protected readonly busy = signal(false);
 
   protected readonly myGames = computed(() => this.gamesWhere((g, mine) => mine));
-  protected readonly openGames = computed(() => this.gamesWhere((g, mine) => !mine && g.status === 'lobby'));
+  /** Games you can actually join: waiting to start and not full. */
+  protected readonly openGames = computed(() =>
+    this.gamesWhere((g, mine) => !mine && g.status === 'lobby' && g.players.length < g.maxPlayers),
+  );
 
   protected readonly newGame = signal({
     name: '',
@@ -66,6 +69,7 @@ export class Lobby {
   /** "Won by alice", or "Draw" when a finished game has no winner. */
   protected resultText(game: GameSummary): string {
     if (game.endReason === 'rulesChanged') return 'Ended: the rules were updated';
+    if (game.endReason === 'agreed') return 'Ended by agreement';
     if (!game.winner) return 'Draw';
     return `Won by ${game.players.find((p) => p.playerId === game.winner)?.username ?? '—'}`;
   }

@@ -104,6 +104,8 @@ export interface GameState {
    * state never changes again. Use this, not `winner`, to test "game over".
    */
   endedAt: GameTime | null;
+  /** Players currently agreeing to end the game with no winner (see VoteEndOrder). */
+  endVotes: PlayerId[];
 }
 
 // --- Orders --------------------------------------------------------------
@@ -114,7 +116,7 @@ export interface GameState {
  * before it executes. Orders are validated *when they execute*; an order that
  * is no longer valid (e.g. not enough drillers) is skipped and reported.
  */
-export type Order = LaunchOrder | DrillMineOrder | SetShieldOrder | ResignOrder;
+export type Order = LaunchOrder | DrillMineOrder | SetShieldOrder | ResignOrder | VoteEndOrder;
 
 interface OrderBase {
   /** Execution time; must be a multiple of `TICK`. */
@@ -147,6 +149,15 @@ export interface ResignOrder extends OrderBase {
   kind: 'resign';
 }
 
+/**
+ * Propose (`agree: true`) or withdraw (`false`) ending the game with no
+ * winner. It ends once every player still in the game agrees.
+ */
+export interface VoteEndOrder extends OrderBase {
+  kind: 'voteEnd';
+  agree: boolean;
+}
+
 // --- Events (what happened; for logs, notifications and the UI) ---------
 
 export type GameEvent =
@@ -168,8 +179,12 @@ export type GameEvent =
   | { kind: 'mineDrilled'; at: GameTime; outpost: OutpostId; player: PlayerId }
   | { kind: 'playerEliminated'; at: GameTime; player: PlayerId; reason: 'queenCaptured' | 'resigned' }
   | { kind: 'gameWon'; at: GameTime; player: PlayerId; reason: 'neptunium' | 'lastStanding' }
-  /** Everyone still in the game was eliminated in the same tick. */
-  | { kind: 'gameDrawn'; at: GameTime };
+  /**
+   * The game ended with no winner: everyone left was eliminated in the same
+   * tick (`eliminated`), or everyone left agreed to end it (`agreed`).
+   */
+  | { kind: 'gameDrawn'; at: GameTime; reason: 'eliminated' | 'agreed' }
+  | { kind: 'endVote'; at: GameTime; player: PlayerId; agree: boolean };
 
 /** One side of a combat, before and after. Same order as `players`. */
 export interface CombatSide {
@@ -235,4 +250,6 @@ export interface PlayerView {
   winner: PlayerId | null;
   /** See `GameState.endedAt`. */
   endedAt: GameTime | null;
+  /** Who agrees to end the game (public to everyone in it). */
+  endVotes: PlayerId[];
 }

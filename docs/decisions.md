@@ -4,6 +4,14 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — Adding an order kind doesn't need a rules version bump
+**Decision:** `voteEnd` was added without bumping `RULES_VERSION`.
+**Why:** the bump exists so replaying *existing* order logs can't produce different results. Old logs contain no `voteEnd` orders, so their replays are byte-identical; the new `endVotes` field is just `[]`. Bump only when existing inputs would replay differently.
+
+### 2026-10-04 — Ending by agreement: unanimous among players still in the game
+**Decision:** a game ends with no winner (`gameDrawn` with reason `agreed`, `end_reason = 'agreed'`) once every non-eliminated player has an active `voteEnd`. Votes can be withdrawn and are public.
+**Why:** agreed with the user. A creator-only "end game" would let a losing creator wipe out everyone else's game. One holdout can't block it forever: the others can resign, and the last one standing wins.
+
 ### 2026-10-04 — The client never sits silently on "connecting…"
 **Decision:**
 - The server refuses sockets with `unauthorized` (no valid session) or `unavailable` (the session lookup failed, e.g. during a deploy). The codes are listed in `CONNECT_ERRORS`.

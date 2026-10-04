@@ -95,6 +95,20 @@
         (select)="select($event)"
       />
       <sub-events-panel [view]="view()!" [events]="snap.events" />
+      @if (canResign() && endVote(); as vote) {
+        <section class="card resign" aria-labelledby="end-title">
+          <h2 id="end-title">End the game</h2>
+          <p>{{ vote.text }} It ends with no winner once everyone still playing agrees.</p>
+          @if (vote.pending) {
+            <p class="muted">Your vote takes effect on the next tick.</p>
+          } @else if (vote.youAgree) {
+            <button type="button" (click)="voteEnd(false)">Withdraw my proposal</button>
+          } @else {
+            <button type="button" (click)="voteEnd(true)">Propose ending the game</button>
+          }
+          <p class="error" role="alert">{{ voteError() }}</p>
+        </section>
+      }
       @if (canResign()) {
         <section class="card resign" aria-labelledby="resign-title">
           <h2 id="resign-title">Leave the game</h2>

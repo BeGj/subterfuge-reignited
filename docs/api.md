@@ -68,6 +68,7 @@ The current game minute is `(now − startedAt) / 60000 × speed`. Use `serverNo
 - `{ kind: 'drillMine', outpost }`
 - `{ kind: 'setShield', outpost, enabled }`
 - `{ kind: 'resign' }`: you're eliminated on the next tick and your waiting orders are cancelled.
+- `{ kind: 'voteEnd', agree }`: propose (`true`) or withdraw (`false`) ending the game with no winner. It ends once everyone still playing agrees. Votes are public (`PlayerView.endVotes`, `endVote` events).
 
 Limits:
 - 60 submissions or cancellations per minute per game

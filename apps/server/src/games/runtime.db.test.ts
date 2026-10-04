@@ -318,6 +318,26 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
     expect({ winner: after.winner, endedAt: after.endedAt }).toEqual({ winner: before.winner, endedAt: before.endedAt });
   });
 
+  it('ends the game with no winner when every player agrees', async () => {
+    const t = await setup();
+    t.setMinute(20);
+    await t.issue(t.a, { kind: 'voteEnd', agree: true });
+    t.setMinute(40);
+    t.loop();
+    const mid = (await t.runtime.snapshot(t.gameId, t.b)).view;
+    expect(mid).toMatchObject({ endedAt: null, endVotes: ['p1'] });
+
+    await t.issue(t.b, { kind: 'voteEnd', agree: true });
+    t.setMinute(60);
+    t.loop();
+    await expect.poll(async () => (await sql<{ status: string; winner: string | null; endReason: string }[]>`
+      SELECT status, winner, end_reason FROM games WHERE id = ${t.gameId}`)[0]).toEqual({
+      status: 'finished',
+      winner: null,
+      endReason: 'agreed',
+    });
+  });
+
   it('ends instead of replaying a game started under different rules', async () => {
     const t = await setup();
     await sql`UPDATE games SET rules_version = ${RULES_VERSION + 1} WHERE id = ${t.gameId}`;

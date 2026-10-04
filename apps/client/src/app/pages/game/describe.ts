@@ -28,6 +28,8 @@ export function describeOrder(order: Order, names: Names): string {
       return `Turn shield ${order.enabled ? 'on' : 'off'} at ${names.outpost(order.outpost)}`;
     case 'resign':
       return 'Resign from the game';
+    case 'voteEnd':
+      return order.agree ? 'Propose ending the game' : 'Withdraw your proposal to end the game';
   }
 }
 
@@ -63,6 +65,10 @@ export function describeEvent(event: GameEvent, names: Names): string {
     case 'gameWon':
       return `${names.player(event.player)} won the game (${event.reason === 'neptunium' ? 'Neptunium' : 'last one standing'})`;
     case 'gameDrawn':
-      return 'The game ended in a draw';
+      return event.reason === 'agreed' ? 'The game ended by agreement (no winner)' : 'The game ended in a draw';
+    case 'endVote':
+      return event.agree
+        ? `${names.player(event.player)} proposed ending the game`
+        : `${names.player(event.player)} withdrew their proposal to end the game`;
   }
 }

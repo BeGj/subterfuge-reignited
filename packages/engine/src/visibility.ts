@@ -88,5 +88,6 @@ export function viewFor(state: GameState, player: PlayerId, options: ViewOptions
     specialists: structuredClone(specialists),
     winner: state.winner,
     endedAt: state.endedAt,
+    endVotes: [...state.endVotes],
   };
 }

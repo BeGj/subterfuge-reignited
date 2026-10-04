@@ -39,6 +39,9 @@ export function parseOrderInput(value: unknown): OrderInput | string {
       return { kind: 'setShield', outpost: o['outpost'] as string, enabled: o['enabled'] as boolean };
     case 'resign':
       return { kind: 'resign' };
+    case 'voteEnd':
+      if (typeof o['agree'] !== 'boolean') return 'voteEnd needs an `agree` boolean.';
+      return { kind: 'voteEnd', agree: o['agree'] as boolean };
     default:
       return 'Unknown order kind.';
   }

@@ -124,7 +124,9 @@ async function main() {
   const game = await call('/api/games', {
     method: 'POST',
     cookie: alice.cookie,
-    body: { name: `smoke-${stamp}`, maxPlayers: 2, speed: SPEED },
+    // Owners hidden, so the fog-of-war check below can test that nothing at
+    // all about hidden outposts leaks.
+    body: { name: `smoke-${stamp}`, maxPlayers: 2, speed: SPEED, revealOwners: false },
   });
   step('game created', Boolean(game.id), game.id);
 
@@ -167,8 +169,10 @@ async function main() {
     unseen > 0,
     `${unseen} of ${snap.view.outposts.length} not visible`,
   );
-  const leaked = snap.view.outposts.filter((o) => !o.visible && o.owner !== undefined).length;
-  step('hidden outposts leak no ownership', leaked === 0, `${leaked} leaks`);
+  const leaked = snap.view.outposts.filter(
+    (o) => !o.visible && (o.owner !== undefined || o.drillers !== undefined || o.shieldCharge !== undefined),
+  ).length;
+  step('hidden outposts leak no owner, drillers or shield', leaked === 0, `${leaked} leaks`);
 
   // Launch a sub at the nearest visible *dormant* outpost and wait for it to
   // be captured. Any other target is a coin flip: an enemy outpost holds 40
@@ -216,6 +220,15 @@ async function main() {
     !bobSeesLaunch,
     `${bobSnap.events.length} events visible to Bob`,
   );
+
+  // Clean up: end the game so it doesn't linger in anyone's lobby (a started
+  // game can't be deleted; a finished one is listed only for its players).
+  // Listen before acting: the order's ack and the final update can arrive
+  // back-to-back, and a finished game sends no further updates.
+  const endedPromise = until(bobSocket, (s) => s.view.endedAt !== null, 'game end');
+  await order(aliceSocket, { gameId: game.id, order: { kind: 'resign' } });
+  const ended = await endedPromise;
+  step('game ended for clean-up', ended.view.winner === 'p2', `winner ${ended.view.winner}`);
 
   aliceSocket.close();
   bobSocket.close();

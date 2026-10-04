@@ -36,6 +36,7 @@ describe('imminentLaunchesFor', () => {
     specialists: [],
     winner: null,
     endedAt: null,
+    endVotes: [],
   } as PlayerView;
   const launch = (id: string, from: string, to: string, at: number, player = 'p1') => ({
     id,
