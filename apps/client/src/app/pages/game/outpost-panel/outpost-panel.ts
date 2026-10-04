@@ -3,7 +3,7 @@ import { FormField, form, max, min, submit } from '@angular/forms/signals';
 import { mineDrillCost, type OrderInput, type OutpostView, type PlayerView } from '@subterfuge/engine';
 import { Realtime } from '../../../core/realtime';
 import { namesFor } from '../describe';
-import { formatDuration, formatGameTime } from '../format';
+import { formatDuration, formatGameTime, plannedTripLabel } from '../format';
 import { travelMinutes } from '../geometry';
 import { estimatedLaunchAt } from '../overlays';
 import { TimeMachine } from '../time-machine';
@@ -79,12 +79,12 @@ export class OutpostPanel {
       : undefined;
     return scheduled ?? estimatedLaunchAt(this.minute());
   });
-  /** "arrives in 11h 50m · Day 2, 03:40", counting the launch delay. */
+  /** "travel 11h 40m · arrives ~Day 2, 03:40" (see plannedTripLabel). */
   protected readonly travel = computed(() => {
     const target = this.target();
     if (!target) return '';
-    const arrival = this.launchAt() + travelMinutes(this.outpost().position, target.position);
-    return `${formatDuration(arrival - this.minute())} · ${formatGameTime(arrival)}`;
+    const travel = travelMinutes(this.outpost().position, target.position);
+    return plannedTripLabel(travel, this.launchAt() + travel);
   });
   /** Shown while scrubbed into the future: orders become scheduled. */
   protected readonly scheduledLabel = computed(() => (this.tm.active() ? formatGameTime(this.launchAt()) : ''));
@@ -116,6 +116,19 @@ export class OutpostPanel {
         text: `${names.player(s.owner)}: ${s.drillers} drillers${s.specialists.length ? ` + ${s.specialists.length} specialist(s)` : ''}`,
         eta: `${formatDuration(s.arrivesAt - this.minute())} · ${formatGameTime(s.arrivesAt)}`,
         mine: s.owner === this.view().you,
+      }));
+  });
+
+  /** Enemy launches about to leave for this outpost (still cancellable by them). */
+  protected readonly enemyLaunches = computed(() => {
+    const names = this.names();
+    return this.tm
+      .imminentLaunches()
+      .filter((o) => o.to === this.outpost().id)
+      .map((o) => ({
+        key: `${o.player}:${o.from}:${o.at}`,
+        text: `${names.player(o.player)}: ${o.drillers} drillers from ${names.outpost(o.from)}`,
+        when: `launches in ${formatDuration(Math.max(0, o.at - this.minute()))}`,
       }));
   });
 

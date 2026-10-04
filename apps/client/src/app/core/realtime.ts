@@ -24,6 +24,13 @@ export class Realtime {
   private readonly gameListeners = new Map<string, Set<(snapshot: GameSnapshot) => void>>();
 
   private readonly statusSignal = signal<ConnectionStatus>('disconnected');
+  private readonly updateSignal = signal(false);
+
+  /**
+   * The server serves a newer client than this page runs (the game was
+   * updated while you were playing). The app shows a refresh prompt.
+   */
+  readonly updateAvailable = this.updateSignal.asReadonly();
   private readonly serverTimeSignal = signal<string | undefined>(undefined);
 
   readonly status = this.statusSignal.asReadonly();
@@ -41,7 +48,10 @@ export class Realtime {
     });
     socket.on('disconnect', () => this.statusSignal.set('connecting'));
     socket.on('connect_error', () => this.statusSignal.set('connecting'));
-    socket.on('hello', ({ serverTime }) => this.serverTimeSignal.set(serverTime));
+    socket.on('hello', ({ serverTime, clientBuild }) => {
+      this.serverTimeSignal.set(serverTime);
+      if (isOutdated(runningBuild(), clientBuild)) this.updateSignal.set(true);
+    });
     socket.on('lobbyChanged', () => this.lobbyListeners.forEach((fn) => fn()));
     socket.on('gameUpdate', (snapshot) => this.gameListeners.get(snapshot.gameId)?.forEach((fn) => fn(snapshot)));
     this.socket = socket;
@@ -112,4 +122,18 @@ export class Realtime {
       send((result) => (result.ok ? resolve(result) : reject(new Error(result.error))));
     });
   }
+}
+
+/** This page's build id: the hash in its main bundle's file name. `null` in development. */
+export function runningBuild(doc: Document = document): string | null {
+  for (const script of Array.from(doc.querySelectorAll('script[src]'))) {
+    const match = /main-([A-Z0-9]+)\.js/.exec(script.getAttribute('src') ?? '');
+    if (match) return match[1]!;
+  }
+  return null;
+}
+
+/** True when both builds are known and differ. */
+export function isOutdated(running: string | null, served: string | null | undefined): boolean {
+  return !!running && !!served && running !== served;
 }

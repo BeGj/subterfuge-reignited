@@ -4,6 +4,23 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-04 — Enemy launches are visible shortly before they happen
+**Decision:** another player's launch order is shown when it's within `IMMINENT_LAUNCH_WINDOW` (= launch delay + one tick = 20 game minutes) of executing, if you'd see the sub once launched. That means it leaves from inside your sonar, or it's heading for one of your outposts. It's drawn as a warning route, listed on the target outpost, and fed into your forecast and battle predictions.
+**Why:** playtest request: players should get a heads-up, and testing a strategy "now" should carry a risk of being seen even though the order is still cancellable. Scheduled orders stay secret until they get close, so the time machine is still useful for planning.
+**Not a rules change:** only views change, so no `RULES_VERSION` bump.
+
+### 2026-10-04 — Outpost owners outside sonar: a per-game setting
+**Decision:** `games.reveal_owners` (migration 004, default true) makes `viewFor` include the owner of every outpost. Drillers and shields stay hidden. It's chosen when creating a game.
+**Why:** in the original game you can usually see who owns an outpost outside your sonar; the playtester asked for it to be toggleable per game. It doesn't change simulation results, so no rules version bump.
+
+### 2026-10-04 — "Refresh to update" when the client is outdated
+**Decision:** the server sends the hash of the client bundle it serves (from `main-<hash>.js` in `index.html`) in `hello` on every connect. A client running a different bundle shows a refresh banner.
+**Why:** after a deploy, players reconnect automatically but keep running the old JavaScript, which may not match the server any more. Using the bundle hash needs no build tooling, and it only triggers when the client actually changed (server-only deploys don't nag).
+
+### 2026-10-04 — Planned launches show trip length, not a countdown
+**Decision:** before a sub launches, labels say "travel 11h 40m · arrives ~Day 2, 03:40" instead of "arrives in …".
+**Why:** playtest bug. The launch only happens after the launch delay, so a countdown from "now" shrank while you were still choosing a target, then jumped back up every tick.
+
 ### 2026-10-04 — Time machine runs the engine on the player's own view
 **Decision:**
 - The client builds a forecast from its `PlayerView` (`stateFromView`) and runs `advance` forward with its pending orders.

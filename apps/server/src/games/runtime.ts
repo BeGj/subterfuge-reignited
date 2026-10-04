@@ -1,5 +1,6 @@
 import {
   HOUR,
+  IMMINENT_LAUNCH_WINDOW,
   LAUNCH_DELAY,
   RULES_VERSION,
   TICK,
@@ -12,7 +13,9 @@ import {
   type GameState,
   type GameTime,
   type IssueOrderRequest,
+  type LaunchOrder,
   type Order,
+  type PlayerView,
   type PendingOrder,
   type PlayerId,
 } from '@subterfuge/engine';
@@ -38,6 +41,8 @@ interface LiveGame {
   speed: number;
   startedAtMs: number;
   finished: boolean;
+  /** Game setting: outpost owners visible outside sonar. */
+  revealOwners: boolean;
   /** userId → engine player id. */
   players: Map<string, PlayerId>;
   state: GameState;
@@ -161,7 +166,7 @@ export class GameRuntime {
       const pending: PendingOrder = { id: row!.id, order };
       game.pending.push(pending);
       sortPending(game.pending);
-      this.publish(game, playerId);
+      this.publishOrderChange(game, playerId, order);
       return pending;
     } finally {
       game.busy--;
@@ -179,8 +184,8 @@ export class GameRuntime {
     game.busy++;
     try {
       await this.sql`UPDATE orders SET cancelled_at = now() WHERE id = ${orderId} AND game_id = ${gameId}`;
-      game.pending.splice(game.pending.findIndex((p) => p.id === orderId), 1);
-      this.publish(game, playerId);
+      const [removed] = game.pending.splice(game.pending.findIndex((p) => p.id === orderId), 1);
+      this.publishOrderChange(game, playerId, removed!.order);
     } finally {
       game.busy--;
     }
@@ -201,8 +206,15 @@ export class GameRuntime {
 
   private async load(gameId: string): Promise<LiveGame> {
     const [row] = await this.sql<
-      { seed: number | null; speed: number; startedAt: Date | null; status: string; rulesVersion: number | null }[]
-    >`SELECT seed, speed, started_at, status, rules_version FROM games WHERE id = ${gameId}`;
+      {
+        seed: number | null;
+        speed: number;
+        startedAt: Date | null;
+        status: string;
+        rulesVersion: number | null;
+        revealOwners: boolean;
+      }[]
+    >`SELECT seed, speed, started_at, status, rules_version, reveal_owners FROM games WHERE id = ${gameId}`;
     if (!row) throw new GameError('Game not found.');
     if (row.status === 'lobby' || row.seed === null || !row.startedAt) throw new GameError('This game has not started yet.');
     if (row.rulesVersion !== RULES_VERSION) {
@@ -240,6 +252,7 @@ export class GameRuntime {
       speed: row.speed,
       startedAtMs: row.startedAt.getTime(),
       finished: row.status === 'finished',
+      revealOwners: row.revealOwners,
       players: new Map(players.map((p) => [p.userId, p.playerId])),
       state: initial,
       pending,
@@ -348,10 +361,20 @@ export class GameRuntime {
     this.sink(game.id, playerId, this.snapshotFor(game, playerId));
   }
 
+  /**
+   * A changed launch may be visible to other players as imminent, so they
+   * get an update too; other orders only concern their owner.
+   */
+  private publishOrderChange(game: LiveGame, playerId: PlayerId, order: Order): void {
+    if (order.kind !== 'launch') return this.publish(game, playerId);
+    for (const p of game.players.values()) this.publish(game, p);
+  }
+
   private snapshotFor(game: LiveGame, playerId: PlayerId): GameSnapshot {
+    const view = viewFor(game.state, playerId, { revealOwners: game.revealOwners });
     return {
       gameId: game.id,
-      view: viewFor(game.state, playerId),
+      view,
       pendingOrders: game.pending.filter((p) => p.order.player === playerId),
       clock: {
         startedAt: new Date(game.startedAtMs).toISOString(),
@@ -359,8 +382,29 @@ export class GameRuntime {
         serverNow: new Date(this.now()).toISOString(),
       },
       events: game.events.get(playerId) ?? [],
+      imminentLaunches: imminentLaunchesFor(view, game.pending, game.state.time),
     };
   }
+}
+
+/**
+ * Other players' launches about to execute (within IMMINENT_LAUNCH_WINDOW of
+ * the current tick) that `view`'s player would see once launched: leaving
+ * from an outpost inside their sonar, or heading for one of their outposts.
+ */
+export function imminentLaunchesFor(view: PlayerView, pending: readonly PendingOrder[], time: GameTime): LaunchOrder[] {
+  const visible = new Set(view.outposts.filter((o) => o.visible).map((o) => o.id));
+  const mine = new Set(view.outposts.filter((o) => o.owner === view.you).map((o) => o.id));
+  return pending
+    .map((p) => p.order)
+    .filter(
+      (o): o is LaunchOrder =>
+        o.kind === 'launch' &&
+        o.player !== view.you &&
+        o.at - time <= IMMINENT_LAUNCH_WINDOW &&
+        (visible.has(o.from) || mine.has(o.to)),
+    )
+    .map((o) => ({ ...o, specialists: [...o.specialists] }));
 }
 
 function sortPending(pending: PendingOrder[]): void {

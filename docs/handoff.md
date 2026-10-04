@@ -59,6 +59,12 @@ Each item notes the design work already done.
 
 - **Rules versioning** (`RULES_VERSION`, migration 003): games store the rules version they started under. The runtime ends, rather than replays, a game whose version differs, with `end_reason = 'rulesChanged'`. **Bump the version when map/simulation output changes** (CLAUDE.md). Without this, the map change above silently rewrote running games on restart.
 
+- **Playtest round 2:**
+  - Enemy launches are visible shortly before they happen (warning routes; included in forecasts).
+  - Per-game setting to show outpost owners outside sonar.
+  - "Refresh to update" banner when the client is outdated after a deploy.
+  - Planned launches show their trip length instead of a countdown.
+
 ### 4.1 Unload finished and idle games from memory (small, recommended next)
 - **Problem:** `GameRuntime.games` (`apps/server/src/games/runtime.ts`) only ever grows.
   - Finished games stay in memory forever.
@@ -156,6 +162,7 @@ From goal.md, still unanswered:
 **Get an independent review before calling work done.** Two reviews caught real concurrency bugs in the runtime: lost orders and missed broadcasts.
 
 **Environment gotchas:**
+- **Judge checks by exit code, not by grepping output.** `tsc` and Vitest colour their output, so `grep "error TS"` silently misses errors. This let a type error slip into three commits. Use e.g. `npm run typecheck >/dev/null 2>&1; echo $?`.
 - **Shell:** zsh. `$var` holding flags doesn't word-split, and `--include=*.ts` globs fail. Write headers out explicitly, and use `grep -rn pattern dir`.
 - **Body-less POSTs:** curl with `-H 'content-type: application/json'` and no body gets a 400 from Fastify. Send no content-type on body-less POSTs. The Angular client already does this.
 - **npm 12** blocks dependency install scripts by default. Everything works anyway; that's expected.

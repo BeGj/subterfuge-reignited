@@ -1,4 +1,4 @@
-import type { GameEvent, GameTime, Order, PlayerView } from './types.js';
+import type { GameEvent, GameTime, LaunchOrder, Order, PlayerView } from './types.js';
 
 /**
  * Shapes shared by the HTTP API and the Socket.IO connection. Living next to
@@ -41,6 +41,8 @@ export interface GameSummary {
   createdAt: string;
   startedAt: string | null;
   players: GameSeat[];
+  /** Outpost owners are visible to everyone even outside sonar. */
+  revealOwners: boolean;
   winner: string | null;
   /** Why a finished game ended; `null` while it hasn't. */
   endReason: GameEndReason | null;
@@ -56,6 +58,8 @@ export interface CreateGameRequest {
   name: string;
   maxPlayers: number;
   speed: number;
+  /** Show who owns outposts outside sonar (default true). */
+  revealOwners?: boolean;
 }
 
 /** Allowed speeds, offered as presets in the UI. */
@@ -96,6 +100,12 @@ export interface GameSnapshot {
   clock: GameClock;
   /** Recent events this player is allowed to know about (newest last). */
   events: GameEvent[];
+  /**
+   * Other players' launch orders about to execute (see
+   * `IMMINENT_LAUNCH_WINDOW`) that this player would see once launched.
+   * They may still be cancelled.
+   */
+  imminentLaunches: LaunchOrder[];
 }
 
 export type Ack<T> = (result: ({ ok: true } & T) | { ok: false; error: string }) => void;
@@ -112,7 +122,12 @@ export interface IssueOrderRequest {
 
 /** Events the server sends to the client over Socket.IO. */
 export interface ServerToClientEvents {
-  hello: (payload: { user: PublicUser; serverTime: string }) => void;
+  /**
+   * On every (re)connect. `clientBuild` identifies the client the server
+   * currently serves (the hashed bundle name), or `null` in development; a
+   * client running a different build should ask the user to refresh.
+   */
+  hello: (payload: { user: PublicUser; serverTime: string; clientBuild: string | null }) => void;
   /** Something in the lobby changed; refetch the game list. */
   lobbyChanged: () => void;
   /** New state for a game this socket is watching. */

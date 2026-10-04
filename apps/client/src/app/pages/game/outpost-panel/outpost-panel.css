@@ -110,3 +110,7 @@ dd {
 .prediction.lose .dot {
   background: var(--danger);
 }
+
+.warn {
+  color: var(--warn);
+}

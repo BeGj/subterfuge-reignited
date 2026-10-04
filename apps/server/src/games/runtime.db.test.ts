@@ -306,6 +306,37 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
     expect(row!.rulesVersion).toBe(RULES_VERSION);
   });
 
+  it('shows a launch to the other player while it is still cancellable, and hides it once cancelled', async () => {
+    const t = await setup();
+    t.setMinute(20);
+    const snapB = await t.runtime.snapshot(t.gameId, t.b);
+    // Launch from one of p1's outposts that p2 can see, if any; else at p2.
+    const snapA = await t.runtime.snapshot(t.gameId, t.a);
+    const seenByB = new Set(snapB.view.outposts.filter((o) => o.visible).map((o) => o.id));
+    const from = ownOutposts(snapA).find((o) => seenByB.has(o.id) && (o.drillers ?? 0) > 0) ?? ownOutposts(snapA).find((o) => (o.drillers ?? 0) > 0)!;
+    const to = snapA.view.outposts.find((o) => o.owner === 'p2') ?? snapA.view.outposts.find((o) => o.owner === null)!;
+    t.published.length = 0;
+    const pending = await t.issue(t.a, { kind: 'launch', from: from.id, to: to.id, drillers: 1, specialists: [] });
+
+    const toB = t.published.filter((p) => p.playerId === 'p2').at(-1);
+    const visibleToB = seenByB.has(from.id) || to.owner === 'p2';
+    expect(toB?.snapshot.imminentLaunches.map((o) => o.from)).toEqual(visibleToB ? [from.id] : []);
+
+    await t.runtime.cancelOrder(t.a, t.gameId, pending.id);
+    expect(t.published.filter((p) => p.playerId === 'p2').at(-1)?.snapshot.imminentLaunches).toEqual([]);
+  });
+
+  it('reveals outpost owners outside sonar only when the game setting is on', async () => {
+    const t = await setup();
+    const hidden = (await t.runtime.snapshot(t.gameId, t.a)).view.outposts.filter((o) => !o.visible);
+    expect(hidden.some((o) => o.owner !== undefined)).toBe(true);
+
+    const off = await setup();
+    await sql`UPDATE games SET reveal_owners = false WHERE id = ${off.gameId}`;
+    const hiddenOff = (await off.restarted().snapshot(off.gameId, off.a)).view.outposts.filter((o) => !o.visible);
+    expect(hiddenOff.every((o) => o.owner === undefined)).toBe(true);
+  });
+
   it("keeps each player's event feed separate, so a busy player can't flush another's", async () => {
     const t = await setup();
     t.setMinute(10);

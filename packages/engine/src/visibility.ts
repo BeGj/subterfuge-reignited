@@ -15,8 +15,14 @@ import type { GameState, OutpostView, PlayerId, PlayerView, Point, Sub } from '.
  *   is heading for one of their outposts.
  * - Specialists are visible at visible outposts and on visible subs; a
  *   player always sees their own specialists.
+ * - With `revealOwners` (a per-game setting), the owner of every outpost is
+ *   known even outside sonar; its contents stay hidden.
  */
-export function viewFor(state: GameState, player: PlayerId): PlayerView {
+export interface ViewOptions {
+  revealOwners?: boolean;
+}
+
+export function viewFor(state: GameState, player: PlayerId, options: ViewOptions = {}): PlayerView {
   const sonar = state.outposts.filter((o) => o.owner === player).map((o) => o.position);
   const inSonar = (p: Point) => sonar.some((s) => distance(s, p) <= SONAR_RANGE);
 
@@ -29,6 +35,7 @@ export function viewFor(state: GameState, player: PlayerId): PlayerView {
         name: o.name,
         position: { ...o.position },
         ...(o.type === 'mine' ? { type: o.type } : {}),
+        ...(options.revealOwners ? { owner: o.owner } : {}),
         visible: false,
       };
     }

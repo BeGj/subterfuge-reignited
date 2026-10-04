@@ -17,7 +17,12 @@ export type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents, 
  * browser sends the session cookie with the handshake and we reuse the
  * normal session lookup. Unauthenticated sockets are rejected.
  */
-export function createRealtime(httpServer: HttpServer, sql: Sql, events: EventBus): RealtimeServer {
+export function createRealtime(
+  httpServer: HttpServer,
+  sql: Sql,
+  events: EventBus,
+  clientBuild: string | null = null,
+): RealtimeServer {
   const io: RealtimeServer = new Server(httpServer, { serveClient: false });
 
   io.use(async (socket, next) => {
@@ -32,7 +37,7 @@ export function createRealtime(httpServer: HttpServer, sql: Sql, events: EventBu
     const { user } = socket.data;
     // One room per user, so every tab/device of a player gets their updates.
     void socket.join(`user:${user.id}`);
-    socket.emit('hello', { user, serverTime: new Date().toISOString() });
+    socket.emit('hello', { user, serverTime: new Date().toISOString(), clientBuild });
     socket.on('ping', (ack) => ack(new Date().toISOString()));
   });
 
@@ -40,4 +45,13 @@ export function createRealtime(httpServer: HttpServer, sql: Sql, events: EventBu
   events.on('lobbyChanged', () => io.emit('lobbyChanged'));
 
   return io;
+}
+
+/**
+ * Identifies the built client being served: the content hash in the main
+ * bundle's file name (`main-ABC123.js` in index.html). It changes whenever
+ * the client changes. `null` when there's no build (development).
+ */
+export function clientBuildId(indexHtml: string | null): string | null {
+  return indexHtml?.match(/main-([A-Z0-9]+)\.js/)?.[1] ?? null;
 }

@@ -89,3 +89,17 @@ describe('viewFor', () => {
     expect(state.outposts[0]!.position.x).toBe(0);
   });
 });
+
+describe('viewFor with revealOwners', () => {
+  it('shows who owns hidden outposts, but nothing else about them', () => {
+    const state = makeState();
+    const hidden = viewFor(state, 'p1').outposts.find((o) => !o.visible)!;
+    expect(hidden.owner).toBeUndefined();
+    const revealed = viewFor(state, 'p1', { revealOwners: true }).outposts.find((o) => o.id === hidden.id)!;
+    const real = state.outposts.find((o) => o.id === hidden.id)!;
+    expect(revealed.owner).toBe(real.owner);
+    expect(revealed.drillers).toBeUndefined();
+    expect(revealed.shieldCharge).toBeUndefined();
+    expect(revealed.visible).toBe(false);
+  });
+});

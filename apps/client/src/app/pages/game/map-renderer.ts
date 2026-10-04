@@ -1,7 +1,7 @@
 import { SONAR_RANGE, type OutpostView, type PlayerView, type Point, type Sub } from '@subterfuge/engine';
 import { toScreen, type Camera, type Viewport } from './camera';
 import { DORMANT_COLOR, UNKNOWN_COLOR, playerColor } from './colors';
-import { formatDuration, formatGameTime } from './format';
+import { formatDuration, formatGameTime, plannedTripLabel } from './format';
 import { subPositionAt, travelMinutes } from './geometry';
 import { badgeCenter, estimatedLaunchAt, type OrderMarker } from './overlays';
 import { isSelected, type Selection } from './selection';
@@ -23,8 +23,21 @@ export interface Scene {
    * delay"; the time machine passes the scheduled time instead.
    */
   launchAt?: number;
+  /**
+   * Enemy launches about to happen (still cancellable by their owner),
+   * drawn as warning routes.
+   */
+  imminent?: readonly ImminentLaunch[];
   /** Your pending orders, as map markers (ghost routes and badges). */
   markers: OrderMarker[];
+}
+
+export interface ImminentLaunch {
+  from: Point;
+  to: Point;
+  color: string;
+  /** Badge text, e.g. "⚠ 40 · 6m". */
+  text: string;
 }
 
 const BG = '#07131f';
@@ -64,6 +77,29 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
     const selected = isSelected(scene.selection, 'order', marker.orderId);
     const hovered = isSelected(scene.hover, 'order', marker.orderId);
     dashedLine(ctx, screen(marker.anchor), screen(marker.target), withAlpha(ACCENT, selected ? 0.9 : hovered ? 0.6 : 0.35), selected ? 2 : 1.5, [2, 5]);
+  }
+
+  // Enemy launches about to happen: a warning route in their colour with a
+  // badge at the origin.
+  for (const launch of scene.imminent ?? []) {
+    const from = screen(launch.from);
+    dashedLine(ctx, from, screen(launch.to), withAlpha(launch.color, 0.8), 2, [10, 4]);
+    ctx.save();
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    const w = ctx.measureText(launch.text).width + 10;
+    const x = from.x - w / 2;
+    const y = from.y - 34;
+    ctx.fillStyle = withAlpha(BG, 0.9);
+    ctx.strokeStyle = launch.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, 18, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = TEXT;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(launch.text, x + 5, y + 9);
+    ctx.restore();
   }
 
   // Planned launch preview.
@@ -115,9 +151,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
 
   if (launchFrom && launchTo && launchTo !== launchFrom) {
     const launchAt = scene.launchAt ?? estimatedLaunchAt(scene.minute);
-    const arrival = launchAt + travelMinutes(launchFrom.position, launchTo.position);
+    const travel = travelMinutes(launchFrom.position, launchTo.position);
     const p = screen(launchTo.position);
-    tag(ctx, `ETA ${formatDuration(arrival - scene.minute)} · ${formatGameTime(arrival)}`, { x: p.x + 16, y: p.y + 22 }, ACCENT, 'left');
+    tag(ctx, plannedTripLabel(travel, launchAt + travel), { x: p.x + 16, y: p.y + 22 }, ACCENT, 'left');
   }
 
   return moving;

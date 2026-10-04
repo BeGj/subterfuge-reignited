@@ -16,7 +16,7 @@ import type { PendingOrder, PlayerView, Point } from '@subterfuge/engine';
 import { fitPoints, pan, toScreen, zoomAt, type Camera, type Viewport } from '../camera';
 import { gameMinuteAt, type ClockSync } from '../clock';
 import { pick, type Hittable } from '../geometry';
-import { drawScene, subPositions } from '../map-renderer';
+import { drawScene, subPositions, type ImminentLaunch } from '../map-renderer';
 import { badgeCenter, orderMarkers } from '../overlays';
 import { ICON_RADIUS, drawBattleIcons, iconCenter, type BattleIcon } from '../battle-icons';
 import { sameSelection, type Selection } from '../selection';
@@ -150,6 +150,8 @@ export class GameMap {
   readonly pending = input<readonly PendingOrder[]>([]);
   readonly launchFromId = input<string | null>(null);
   readonly launchTargetId = input<string | null>(null);
+  /** Enemy launches about to happen. */
+  readonly imminent = input<readonly ImminentLaunch[]>([]);
   /** Predicted fights to mark on the map. */
   readonly battles = input<readonly BattleIcon[]>([]);
   /** Show this game minute instead of the live clock (time machine). */
@@ -219,6 +221,7 @@ export class GameMap {
       this.launchFromId();
       this.launchTargetId();
       this.battles();
+      this.imminent();
       this.fixedMinute();
       this.launchAt();
       this.hover();
@@ -277,6 +280,7 @@ export class GameMap {
         launchFromId: this.launchFromId(),
         launchTargetId: this.launchTargetId(),
         launchAt: this.launchAt(),
+        imminent: this.imminent(),
         markers: orderMarkers(this.view(), this.pending(), minute),
       });
       const selection = this.selection();

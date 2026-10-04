@@ -30,6 +30,14 @@ export const TICK = 10 * MINUTE;
 /** Orders (launches, gifts) can be edited or cancelled for this long. */
 export const LAUNCH_DELAY = 10 * MINUTE;
 
+/**
+ * Other players see your launch order this long before it executes (if they
+ * could see the sub once launched). An immediate launch is always inside this
+ * window, so a launch can be spotted, and reacted to, while it's still
+ * cancellable. Scheduled launches stay secret until they get this close.
+ */
+export const IMMINENT_LAUNCH_WINDOW = LAUNCH_DELAY + TICK;
+
 // --- Setup ---------------------------------------------------------------
 
 export const STARTING_OUTPOSTS = 5;

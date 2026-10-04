@@ -11,7 +11,7 @@ The engine holds the game rules as pure, deterministic functions. The server run
 | `validateOrder(state, order)` | `simulation.ts` | Returns a reason string if the order is invalid right now, else `null` |
 | `travelTime(state, from, to)` | `simulation.ts` | Travel time between two outposts at 1.0 speed, rounded up to whole ticks |
 | `subPosition(state, sub, time)` | `simulation.ts` | Where a sub is at a given time, interpolated along its route |
-| `viewFor(state, player)` | `visibility.ts` | Cuts the state down to what one player may see (fog of war) |
+| `viewFor(state, player, { revealOwners? })` | `visibility.ts` | Cuts the state down to what one player may see (fog of war). `revealOwners` (a per-game setting) also shows the owner of outposts outside sonar |
 | `stateFromView(view)`, `forecast(view, orders, until)` | `forecast.ts` | The time machine's simulated future, built only from what one player can see |
 | `predictArrivals(view, orders)` | `forecast.ts` | For each visible sub and pending launch: arrival time and predicted outcome (`win`, `lose`, `safe`, `unknown`) with battle numbers |
 | `resolveOutpostCombat`, `resolveSubCombat` | `combat.ts` | The combat phases |

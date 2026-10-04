@@ -116,3 +116,10 @@ p {
 .create button {
   margin-top: 26px;
 }
+
+.check {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

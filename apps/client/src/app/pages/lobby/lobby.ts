@@ -30,7 +30,12 @@ export class Lobby {
   protected readonly myGames = computed(() => this.gamesWhere((g, mine) => mine));
   protected readonly openGames = computed(() => this.gamesWhere((g, mine) => !mine && g.status === 'lobby'));
 
-  protected readonly newGame = signal({ name: '', maxPlayers: '4', speed: String(GAME_SPEEDS[1].speed) });
+  protected readonly newGame = signal({
+    name: '',
+    maxPlayers: '4',
+    speed: String(GAME_SPEEDS[1].speed),
+    revealOwners: true,
+  });
   protected readonly newGameForm = form(this.newGame, (path) => {
     required(path.name, { message: 'Give the game a name.' });
     maxLength(path.name, GAME_NAME_MAX_LENGTH);
@@ -68,8 +73,10 @@ export class Lobby {
   protected onCreate(event: Event): void {
     event.preventDefault();
     void submit(this.newGameForm, async () => {
-      const { name, maxPlayers, speed } = this.newGame();
-      await this.run(() => this.games.create({ name: name.trim(), maxPlayers: Number(maxPlayers), speed: Number(speed) }));
+      const { name, maxPlayers, speed, revealOwners } = this.newGame();
+      await this.run(() =>
+        this.games.create({ name: name.trim(), maxPlayers: Number(maxPlayers), speed: Number(speed), revealOwners }),
+      );
       this.newGameForm().reset();
       this.newGame.update((v) => ({ ...v, name: '' }));
     });

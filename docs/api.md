@@ -13,7 +13,7 @@ Every endpoint and socket event except registering and logging in requires a ses
 |---|---|---|---|
 | `GET /api/games?before=<id>&limit=<1..100>` | – | `200 GameSummary[]`: unfinished games, plus finished ones you played. Newest first, 50 per page by default. For the next page, pass the last id as `before` | `400` invalid cursor |
 | `GET /api/games/:id` | – | `200 GameSummary` | `404` |
-| `POST /api/games` | `{ name, maxPlayers, speed }` | `201 GameSummary`; you join seat 1 | `400` invalid, `429` too many created |
+| `POST /api/games` | `{ name, maxPlayers, speed, revealOwners? }` (`revealOwners` defaults to true) | `201 GameSummary`; you join seat 1 | `400` invalid, `429` too many created |
 | `POST /api/games/:id/join` | – | `204` | `409` started, full or already joined; `429` too many joins |
 | `POST /api/games/:id/leave` | – | `204` | `409` started, creator, or not joined |
 | `POST /api/games/:id/start` | – | `204`: assigns player ids `p1..pN` in seat order and starts the clock | `403` not the creator, `409` started or fewer than 2 players |
@@ -33,7 +33,7 @@ The client connects on the same origin, and the handshake is authenticated with 
 ### Server → client
 | Event | Payload | When |
 |---|---|---|
-| `hello` | `{ user, serverTime }` | On connect |
+| `hello` | `{ user, serverTime, clientBuild }` | On every (re)connect. `clientBuild` is the served client's bundle hash (`null` in dev); a client running a different build shows "refresh to update" |
 | `lobbyChanged` | – | Any game was created, joined, left, started, deleted or finished. Refetch `GET /api/games` |
 | `gameUpdate` | `GameSnapshot` | To each player of a watched game: every tick, and after their own orders change |
 
@@ -56,6 +56,7 @@ Every acknowledgement is either `{ ok: true, ... }` or `{ ok: false, error }`.
   pendingOrders: PendingOrder[], // your orders that haven't executed yet
   clock: { startedAt, speed, serverNow },
   events: GameEvent[],           // your last 100 visible events, oldest first
+  imminentLaunches: LaunchOrder[], // enemy launches about to happen that you'd see (still cancellable)
 }
 ```
 The current game minute is `(now − startedAt) / 60000 × speed`. Use `serverNow` to correct for the difference between your clock and the server's.
@@ -71,6 +72,12 @@ Limits:
 - 60 submissions or cancellations per minute per game
 - at most 100 waiting orders
 - at most 5 watched games per connection
+
+### What other players see of your orders
+- A **launch** becomes visible to another player once it's within `IMMINENT_LAUNCH_WINDOW` (20 game minutes) of executing, if they'd see the sub once launched: it leaves from an outpost inside their sonar, or it's heading for one of their outposts.
+  - An immediate launch is therefore visible during its 10-minute launch delay, while you can still cancel it.
+  - Scheduled launches stay secret until they get that close.
+- Other orders (drill, shield, resign) are never shown before they execute.
 
 ### Order timing
 - Without `at`, orders run as soon as allowed:

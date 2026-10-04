@@ -27,7 +27,7 @@ import {
 
 /** A predicted fight (or arrival) and which sub/order it belongs to. */
 export interface Prediction extends ArrivalPrediction {
-  /** Selection id: `sub:<id>` or `order:<pendingOrderId>`. */
+  /** Selection id: `sub:<id>`, `order:<pendingOrderId>`, or `enemy:<n>` for an enemy launch about to happen. */
   key: string;
   /** Pending order id, for predictions of launches that haven't happened. */
   pendingId?: string;
@@ -56,7 +56,15 @@ export class TimeMachine {
   /** The minute the map should show: scrubbed, or live. */
   readonly displayMinute = computed(() => this.scrub() ?? this.liveMinute());
 
-  private readonly orders = computed<Order[]>(() => this.snapshot()?.pendingOrders.map((p) => p.order) ?? []);
+  /**
+   * Orders the forecast plays: yours, plus enemy launches you can see coming
+   * (they may still be cancelled, but they're the best guess there is).
+   */
+  private readonly orders = computed<Order[]>(() => {
+    const snap = this.snapshot();
+    if (!snap) return [];
+    return [...snap.pendingOrders.map((p) => p.order), ...(snap.imminentLaunches ?? [])];
+  });
 
   /** Forecast state at the scrubbed tick, or `null` when live. */
   readonly forecastState = computed<GameState | null>(() => {
@@ -72,7 +80,7 @@ export class TimeMachine {
     if (!snap) return null;
     const state = this.forecastState();
     if (!state) return snap.view;
-    const forecast = maskUnknown(viewFor(state, snap.view.you));
+    const forecast = maskUnknown(viewFor(state, snap.view.you), snap.view);
     // The leaderboard is public and live; a forecast only knows the other
     // players' visible outposts, so their forecast counts would be wrong
     // (e.g. "1 outpost"). Keep your own forecast numbers, others' live ones.
@@ -93,6 +101,9 @@ export class TimeMachine {
     return snap.pendingOrders.filter((p) => p.order.at > t);
   });
 
+  /** Enemy launches you can see coming (they may still be cancelled). */
+  readonly imminentLaunches = computed(() => this.snapshot()?.imminentLaunches ?? []);
+
   /** Predicted fights and arrivals for every visible sub and pending launch. */
   readonly predictions = computed<Prediction[]>(() => {
     const snap = this.snapshot();
@@ -100,7 +111,8 @@ export class TimeMachine {
     const you = snap.view.you;
     return predictArrivals(snap.view, this.orders()).map((p) => {
       const pendingId = p.order === undefined ? undefined : snap.pendingOrders[p.order]?.id;
-      const key = p.sub !== undefined ? `sub:${p.sub}` : `order:${pendingId}`;
+      // Orders past your own are enemy launches you can see coming.
+      const key = p.sub !== undefined ? `sub:${p.sub}` : pendingId !== undefined ? `order:${pendingId}` : `enemy:${p.order}`;
       return { ...p, key, ...(pendingId ? { pendingId } : {}), yours: outcomeFor(p, you) };
     });
   });
@@ -243,14 +255,24 @@ export class TimeMachine {
  * Forecasts own hidden outposts through a placeholder player; show those as
  * plain hidden outposts again and drop the placeholder from the player list.
  */
-export function maskUnknown(view: PlayerView): PlayerView {
+export function maskUnknown(view: PlayerView, live?: PlayerView): PlayerView {
+  const liveOwner = new Map(live?.outposts.map((o) => [o.id, o.owner]) ?? []);
   return {
     ...view,
     players: view.players.filter((p) => p.id !== UNKNOWN_PLAYER),
     outposts: view.outposts.map((o) => {
       if (o.owner !== UNKNOWN_PLAYER) return o;
-      // Hidden then and hidden in the forecast: position, name and (for mines) type only.
-      return { id: o.id, name: o.name, position: o.position, visible: false, ...(o.type === 'mine' ? { type: o.type } : {}) };
+      // Hidden then and hidden in the forecast: position, name, (for mines)
+      // type, and the owner if the game reveals owners.
+      const owner = liveOwner.get(o.id);
+      return {
+        id: o.id,
+        name: o.name,
+        position: o.position,
+        visible: false,
+        ...(o.type === 'mine' ? { type: o.type } : {}),
+        ...(owner !== undefined ? { owner } : {}),
+      };
     }),
   };
 }

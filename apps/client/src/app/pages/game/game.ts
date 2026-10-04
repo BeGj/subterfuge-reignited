@@ -15,6 +15,9 @@ import { OrderPanel } from './order-panel/order-panel';
 import type { Selection } from './selection';
 import { BattlePanel } from './battle-panel';
 import { battleIcons } from './battle-icons';
+import { playerColor } from './colors';
+import { formatDuration } from './format';
+import type { ImminentLaunch } from './map-renderer';
 import { TimeBar } from './time-bar';
 import { TimeMachine } from './time-machine';
 
@@ -60,6 +63,20 @@ export class Game {
     const view = this.snapshot()?.view;
     if (view?.endedAt != null) return formatGameTime(view.endedAt);
     return formatGameTime(this.liveMinute());
+  });
+  /** Enemy launches about to happen, as warning routes (live view only). */
+  protected readonly imminent = computed<ImminentLaunch[]>(() => {
+    const snap = this.snapshot();
+    if (!snap || this.tm.active()) return [];
+    const pos = new Map(snap.view.outposts.map((o) => [o.id, o.position]));
+    const minute = this.liveMinute();
+    return snap.imminentLaunches.flatMap((o) => {
+      const from = pos.get(o.from);
+      const to = pos.get(o.to);
+      if (!from || !to) return [];
+      const wait = Math.max(0, o.at - minute);
+      return [{ from, to, color: playerColor(snap.view, o.player), text: `⚠ ${o.drillers} · ${formatDuration(wait)}` }];
+    });
   });
   /** Predicted fights still ahead of the displayed time, as map icons. */
   protected readonly battles = computed(() => {

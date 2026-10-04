@@ -2,7 +2,7 @@ import type { OutpostView, Sub } from '@subterfuge/engine';
 import { fitPoints, pan, toMap, toScreen, zoomAt } from './camera';
 import { gameMinuteAt, minutesToNextProduction, syncClock } from './clock';
 import { describeEvent, describeOrder, namesFor } from './describe';
-import { formatDuration, formatGameTime, formatNeptunium } from './format';
+import { formatDuration, formatGameTime, formatNeptunium, plannedTripLabel } from './format';
 import { hitTestOutpost, subPositionAt, travelMinutes } from './geometry';
 
 describe('format', () => {
@@ -119,5 +119,11 @@ describe('describe', () => {
     expect(describeEvent({ kind: 'playerEliminated', at: 0, player: 'p2', reason: 'queenCaptured' }, names)).toBe(
       'bob was eliminated (Queen captured)',
     );
+  });
+});
+
+describe('plannedTripLabel', () => {
+  it('shows a fixed trip length, not a countdown', () => {
+    expect(plannedTripLabel(700, 24 * 60 + 220)).toBe('travel 11h 40m · arrives ~Day 2, 03:40');
   });
 });

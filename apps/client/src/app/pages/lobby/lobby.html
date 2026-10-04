@@ -22,6 +22,9 @@
           <h3>{{ game.name }}</h3>
           <p class="muted">
             {{ game.players.length }}/{{ game.maxPlayers }} players · {{ speedLabel(game.speed) }}
+            @if (!game.revealOwners) {
+              · owners hidden
+            }
           </p>
           <p class="players">{{ playerNames(game) }}</p>
         </div>
@@ -62,6 +65,9 @@
         <h3>{{ game.name }}</h3>
         <p class="muted">
           {{ game.players.length }}/{{ game.maxPlayers }} players · {{ speedLabel(game.speed) }} · by {{ game.createdBy }}
+          @if (!game.revealOwners) {
+            · owners hidden
+          }
         </p>
       </div>
       <div class="actions">
@@ -113,6 +119,10 @@
         }
       </select>
     </div>
+    <label class="check">
+      <input type="checkbox" [formField]="newGameForm.revealOwners" />
+      Show who owns outposts outside sonar
+    </label>
     <button type="submit" class="primary" [disabled]="busy()">Create</button>
   </form>
 </section>

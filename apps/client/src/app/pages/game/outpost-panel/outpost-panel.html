@@ -45,6 +45,15 @@
     </ul>
   }
 
+  @if (enemyLaunches().length) {
+    <h3 id="launching-title" class="warn">About to launch here</h3>
+    <ul class="incoming" aria-labelledby="launching-title">
+      @for (l of enemyLaunches(); track l.key) {
+        <li>{{ l.text }} <span class="muted">{{ l.when }} (can still be cancelled)</span></li>
+      }
+    </ul>
+  }
+
   @if (isMine()) {
     @if (tm.active()) {
       <p class="scheduled">Orders from here are <strong>scheduled</strong> for the forecast time.</p>
@@ -65,7 +74,7 @@
       <form class="launch" (submit)="onLaunch($event)" novalidate>
         <p>
           @if (target(); as t) {
-            To <strong>{{ t.name }}</strong> · arrives in {{ travel() }}
+            To <strong>{{ t.name }}</strong> · {{ travel() }}
             @if (scheduledLabel()) {
               <br />Leaves at {{ scheduledLabel() }} (scheduled)
             }

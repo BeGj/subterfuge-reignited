@@ -13,7 +13,7 @@ export class LobbyError extends Error {
 
 const summaryColumns = (sql: Sql) => sql`
   g.id, g.name, g.status, g.max_players, g.speed, cu.username AS created_by,
-  g.created_at, g.started_at, g.winner, g.end_reason,
+  g.created_at, g.started_at, g.winner, g.end_reason, g.reveal_owners,
   COALESCE(
     json_agg(
       json_build_object(
@@ -70,12 +70,12 @@ export async function getGame(sql: Sql, gameId: string): Promise<GameSummary> {
 export async function createGame(
   sql: Sql,
   userId: string,
-  input: { name: string; maxPlayers: number; speed: number },
+  input: { name: string; maxPlayers: number; speed: number; revealOwners?: boolean },
 ): Promise<string> {
   return sql.begin(async (tx) => {
     const [game] = await tx<{ id: string }[]>`
-      INSERT INTO games (name, max_players, speed, created_by)
-      VALUES (${input.name.trim()}, ${input.maxPlayers}, ${input.speed}, ${userId})
+      INSERT INTO games (name, max_players, speed, created_by, reveal_owners)
+      VALUES (${input.name.trim()}, ${input.maxPlayers}, ${input.speed}, ${userId}, ${input.revealOwners ?? true})
       RETURNING id`;
     await tx`INSERT INTO game_players (game_id, user_id, seat) VALUES (${game!.id}, ${userId}, 1)`;
     return game!.id;

@@ -4,7 +4,9 @@ import { loadConfig } from './config.ts';
 import { createDb } from './db.ts';
 import { createEventBus } from './events.ts';
 import { migrate } from './migrate.ts';
-import { createRealtime } from './realtime.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { clientBuildId, createRealtime } from './realtime.ts';
 import { GameRuntime } from './games/runtime.ts';
 import { attachGameHandlers, gameRoom } from './games/socket-handlers.ts';
 
@@ -16,7 +18,14 @@ await migrate(sql);
 
 const events = createEventBus();
 const app = await buildApp(config, sql, events);
-const io = createRealtime(app.server, sql, events);
+const indexHtml = (() => {
+  try {
+    return readFileSync(join(config.clientDist, 'index.html'), 'utf8');
+  } catch {
+    return null; // dev: no client build
+  }
+})();
+const io = createRealtime(app.server, sql, events, clientBuildId(indexHtml));
 const runtime = new GameRuntime({
   sql,
   events,

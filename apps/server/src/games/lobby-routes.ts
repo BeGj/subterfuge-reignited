@@ -42,6 +42,7 @@ const createSchema = {
       name: { type: 'string', minLength: 1, maxLength: GAME_NAME_MAX_LENGTH, pattern: '\\S' },
       maxPlayers: { type: 'integer', minimum: MIN_PLAYERS, maximum: MAX_PLAYERS },
       speed: { type: 'integer', enum: GAME_SPEEDS.map((s) => s.speed) },
+      revealOwners: { type: 'boolean' },
     },
   },
 } as const;

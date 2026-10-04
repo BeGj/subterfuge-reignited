@@ -31,3 +31,13 @@ export function formatNeptunium(units: number): string {
 export function formatSpeed(speed: number): string {
   return speed === 1 ? 'Real time' : `${speed}× speed`;
 }
+
+/**
+ * Label for a launch that hasn't happened yet: the trip length (fixed) and
+ * when it would arrive. Deliberately not a countdown from now: the sub only
+ * leaves after the launch delay, so "arrives in…" would shrink while you're
+ * still choosing and then jump back each tick.
+ */
+export function plannedTripLabel(travel: number, arrival: number): string {
+  return `travel ${formatDuration(travel)} · arrives ~${formatGameTime(arrival)}`;
+}

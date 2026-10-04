@@ -12,3 +12,12 @@ describe('loadConfig', () => {
     expect(loadConfig({ TRUST_PROXY: '10.0.0.1,10.0.0.2' }).trustProxy).toBe('10.0.0.1,10.0.0.2');
   });
 });
+
+describe('clientBuildId', () => {
+  it('reads the hash from the main bundle in index.html', async () => {
+    const { clientBuildId } = await import('./realtime.ts');
+    expect(clientBuildId('<script src="main-L3X4QR55.js" type="module"></script>')).toBe('L3X4QR55');
+    expect(clientBuildId('<script src="main.js"></script>')).toBeNull();
+    expect(clientBuildId(null)).toBeNull();
+  });
+});

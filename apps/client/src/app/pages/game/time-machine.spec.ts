@@ -26,6 +26,7 @@ function setup() {
     pendingOrders: [{ id: '1', order: launch }],
     clock: { startedAt: new Date(0).toISOString(), speed: 60, serverNow: new Date(0).toISOString() },
     events: [],
+    imminentLaunches: [],
   });
 
   TestBed.configureTestingModule({ providers: [TimeMachine] });
