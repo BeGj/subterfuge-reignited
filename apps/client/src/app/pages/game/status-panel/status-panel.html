@@ -1,0 +1,39 @@
+<section class="card" aria-labelledby="players-title">
+  <h2 id="players-title">Players</h2>
+  <ul class="players">
+    @for (p of players(); track p.id) {
+      <li>
+        <span class="swatch" [style.background]="p.color" aria-hidden="true"></span>
+        <span class="name" [class.out]="p.eliminated">
+          {{ p.name }}
+          @if (p.isYou) {
+            <span class="muted">(you)</span>
+          }
+          @if (p.eliminated) {
+            <span class="muted">— eliminated</span>
+          }
+        </span>
+        <span title="Neptunium (kg)">{{ p.kg }}/{{ goal }} kg</span>
+        <span class="muted" title="Outposts">{{ p.outpostCount }}⌂</span>
+      </li>
+    }
+  </ul>
+
+  <div class="stats">
+    <p>Drillers: <strong>{{ totals().drillers }}</strong> / {{ totals().cap }} capacity</p>
+    <p class="muted">Next production in {{ nextProduction() }}</p>
+  </div>
+
+  <h2 id="your-outposts">Your outposts</h2>
+  <ul class="outposts" aria-labelledby="your-outposts">
+    @for (o of myOutposts(); track o.id) {
+      <li>
+        <button type="button" [attr.aria-pressed]="o.id === selectedId()" (click)="select.emit(o.id)">
+          {{ o.name }} · {{ o.drillers }}
+        </button>
+      </li>
+    } @empty {
+      <li class="muted">None</li>
+    }
+  </ul>
+</section>

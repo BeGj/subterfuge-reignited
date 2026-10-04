@@ -1,0 +1,118 @@
+<header>
+  <h1 class="logo">Subterfuge <span>Reignited</span></h1>
+  <div class="who">
+    <span class="status" [class]="realtime.status()" [title]="'Server connection: ' + realtime.status()">●</span>
+    <span>{{ auth.user()?.username }}</span>
+    <button type="button" (click)="logout()">Log out</button>
+  </div>
+</header>
+
+<p class="error" role="alert">{{ error() }}</p>
+
+<section class="card" aria-labelledby="my-games">
+  <h2 id="my-games">Your games</h2>
+  @if (list.isLoading() && !list.hasValue()) {
+    <p class="muted">Loading…</p>
+  } @else if (list.error()) {
+    <p class="error">Could not load games. <button type="button" class="link" (click)="list.reload()">Retry</button></p>
+  } @else {
+    @for (game of myGames(); track game.id) {
+      <article class="game">
+        <div class="game-info">
+          <h3>{{ game.name }}</h3>
+          <p class="muted">
+            {{ game.players.length }}/{{ game.maxPlayers }} players · {{ speedLabel(game.speed) }}
+          </p>
+          <p class="players">{{ playerNames(game) }}</p>
+        </div>
+        <div class="actions">
+          @switch (game.status) {
+            @case ('lobby') {
+              @if (isCreator(game)) {
+                <button type="button" class="primary" [disabled]="busy() || game.players.length < 2" (click)="start(game)">
+                  Start
+                </button>
+                <button type="button" [disabled]="busy()" (click)="remove(game)">Delete</button>
+              } @else {
+                <span class="muted">Waiting for {{ game.createdBy }} to start</span>
+                <button type="button" [disabled]="busy()" (click)="leave(game)">Leave</button>
+              }
+            }
+            @case ('running') {
+              <a class="button primary" [routerLink]="['/games', game.id]">Play</a>
+            }
+            @case ('finished') {
+              <span class="muted">{{ resultText(game) }}</span>
+              <a class="button" [routerLink]="['/games', game.id]">View</a>
+            }
+          }
+        </div>
+      </article>
+    } @empty {
+      <p class="muted">You're not in any games yet. Join one below or create your own.</p>
+    }
+  }
+</section>
+
+<section class="card" aria-labelledby="open-games">
+  <h2 id="open-games">Open games</h2>
+  @for (game of openGames(); track game.id) {
+    <article class="game">
+      <div class="game-info">
+        <h3>{{ game.name }}</h3>
+        <p class="muted">
+          {{ game.players.length }}/{{ game.maxPlayers }} players · {{ speedLabel(game.speed) }} · by {{ game.createdBy }}
+        </p>
+      </div>
+      <div class="actions">
+        <button
+          type="button"
+          class="primary"
+          [disabled]="busy() || game.players.length >= game.maxPlayers"
+          (click)="join(game)"
+        >
+          Join
+        </button>
+      </div>
+    </article>
+  } @empty {
+    <p class="muted">No open games right now.</p>
+  }
+</section>
+
+<section class="card" aria-labelledby="create-game">
+  <h2 id="create-game">Create a game</h2>
+  <form class="create" (submit)="onCreate($event)" novalidate>
+    <div class="field name">
+      <label for="game-name">Name</label>
+      <input
+        id="game-name"
+        [formField]="newGameForm.name"
+        [attr.aria-invalid]="newGameForm.name().touched() && newGameForm.name().invalid()"
+        aria-describedby="game-name-error"
+      />
+      <p id="game-name-error" class="field-error">
+        @if (newGameForm.name().touched()) {
+          {{ newGameForm.name().errors()[0]?.message }}
+        }
+      </p>
+    </div>
+    <div class="field">
+      <label for="game-players">Players</label>
+      <select id="game-players" [formField]="newGameForm.maxPlayers">
+        @for (n of playerCounts; track n) {
+          <option [value]="n">{{ n }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="game-speed">Speed</label>
+      <select id="game-speed" [formField]="newGameForm.speed">
+        @for (s of speeds; track s.speed) {
+          <option [value]="s.speed">{{ s.label }}</option>
+        }
+      </select>
+    </div>
+    <button type="submit" class="primary" [disabled]="busy()">Create</button>
+  </form>
+</section>

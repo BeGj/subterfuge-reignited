@@ -44,8 +44,6 @@ export async function authRoutes(app: FastifyInstance, { sql, cookieSecure }: Au
   const loginPerIp = new RateLimiter(50, FIFTEEN_MINUTES);
   const registerPerIp = new RateLimiter(10, HOUR);
 
-  app.decorateRequest('user', null);
-
   const setSessionCookie = (reply: FastifyReply, token: string, expires: Date) =>
     reply.setCookie(SESSION_COOKIE, token, {
       path: '/',

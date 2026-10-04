@@ -4,4 +4,8 @@ export * from './shield.js';
 export * from './economy.js';
 export * from './combat.js';
 export * from './random.js';
+export * from './geometry.js';
+export * from './map.js';
+export * from './simulation.js';
+export * from './visibility.js';
 export * from './protocol.js';

@@ -45,7 +45,8 @@ body {
   padding: 24px;
 }
 
-input {
+input,
+select {
   font: inherit;
   color: var(--text);
   background: var(--bg);
@@ -58,7 +59,10 @@ input[aria-invalid='true'] {
   border-color: var(--danger);
 }
 
-button {
+button,
+a.button {
+  display: inline-block;
+  text-decoration: none;
   font: inherit;
   cursor: pointer;
   color: var(--text);
@@ -68,7 +72,8 @@ button {
   padding: 8px 14px;
 }
 
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);

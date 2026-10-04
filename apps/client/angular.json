@@ -64,7 +64,12 @@
           },
           "defaultConfiguration": "development",
           "options": {
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.json",
+            "prebundle": {
+              "exclude": [
+                "@subterfuge/engine"
+              ]
+            }
           }
         },
         "test": {

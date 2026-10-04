@@ -14,5 +14,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./pages/lobby/lobby').then((m) => m.Lobby),
   },
+  {
+    path: 'games/:id',
+    title: 'Game · Subterfuge Reignited',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/game/game').then((m) => m.Game),
+  },
   { path: '**', redirectTo: '' },
 ];

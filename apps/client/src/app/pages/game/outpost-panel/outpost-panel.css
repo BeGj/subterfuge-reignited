@@ -1,0 +1,60 @@
+h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+}
+
+.chip {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.launch p {
+  margin: 0 0 8px;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}

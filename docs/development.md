@@ -65,7 +65,14 @@ To reset your local database: `docker compose down -v && npm run db:up`.
 ## Tests
 
 - **Engine:** `packages/engine/src/*.test.ts`. Prefer the rulebook's own worked examples as test cases (e.g. "27 vs 11 drillers leaves 16").
-- **Server:** `apps/server/src/**/*.test.ts`. Unit tests only so far.
+  - `replay.test.ts` is the most important test in the repo. It proves that replaying the same orders gives byte-identical state however the time is chunked, which is what the server's restart model relies on.
+  - Benchmark: `npm run build -w @subterfuge/engine && node packages/engine/bench/replay-bench.mjs`.
+- **Server:** `apps/server/src/**/*.test.ts`.
+  - **Unit tests:** auth, the order parser, event privacy, and the schema↔engine constant check.
+  - **Database tests** (`*.db.test.ts`): the lobby store and the game runtime, covering clock mapping, order timing, cancelling, restart replay, the order-write race, broadcasting, limits, resigning and event feeds.
+    - Each test file creates and migrates its own throwaway database (`sub_test_…`) and drops it afterwards.
+    - They need Postgres (`npm run db:up`). They use `TEST_DATABASE_URL`, then `DATABASE_URL`, then the local default.
+    - If no database is reachable they're **skipped**, not failed, so `npm test` works without Docker.
 - **Client:** `apps/client/src/**/*.spec.ts`, run through `ng test` (Vitest + jsdom).
 
 ## Code conventions
@@ -84,4 +91,5 @@ To reset your local database: `docker compose down -v && npm run db:up`.
 - **`npm install` warns that install scripts were blocked.** npm 12 blocks dependency install scripts by default. Everything works without them (esbuild ships prebuilt binaries). You can review the list with `npm install-scripts ls`.
 - **The server exits with `EADDRINUSE` on port 3000.** The full app from `docker compose up` is still running. Stop it with `docker compose stop app`, then run `npm run dev` again.
 - **Port 5432 is already in use.** Another Postgres is running. Run `DB_PORT=5433 npm run db:up` and update `DATABASE_URL` in `.env` to match.
+- **The client fails with "does not provide an export named …" from `@subterfuge/engine`.** The dev server had cached an old engine build. The engine is excluded from Vite pre-bundling (`prebundle.exclude` in `angular.json`), so this shouldn't happen. If it does, delete `apps/client/.angular/cache` and restart `npm run dev`.
 - **The client shows a blank page.** Check the browser console and the `[client]` output; Angular errors appear in both.

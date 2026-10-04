@@ -52,6 +52,8 @@ goal.md            The game rules we're implementing, with sources
 | [docs/architecture.md](docs/architecture.md) | How the pieces fit together and why |
 | [docs/development.md](docs/development.md) | Local setup, scripts, testing, adding migrations |
 | [docs/auth.md](docs/auth.md) | How login, sessions and socket authentication work |
+| [docs/engine.md](docs/engine.md) | Engine API, units, simulation order, simplifications |
+| [docs/api.md](docs/api.md) | HTTP and Socket.IO API reference |
 | [docs/decisions.md](docs/decisions.md) | Log of technical decisions and their reasons |
 
 ## Status
@@ -60,10 +62,11 @@ goal.md            The game rules we're implementing, with sources
 - [x] Accounts: register, log in, log out, sessions
 - [x] Authenticated Socket.IO connection
 - [x] Engine: constants, combat resolution, shields, production, mining maths
-- [ ] Map generation
-- [ ] Game simulation (event queue, subs, production ticks)
-- [ ] Lobby: create and join games
-- [ ] Game map UI
-- [ ] Specialists
+- [x] Map generation
+- [x] Game simulation (ticks, subs, combat, production, mining, wins) and fog of war
+- [x] Lobby: create, join, leave, start games
+- [x] Game runtime: replay from orders, live updates, order and cancel API
+- [x] Game screen: canvas map, outpost panel, launch / drill / shield orders, pending orders, players, events
+- [ ] Specialists (hiring, promotion, abilities; only the Queen exists so far)
 - [ ] Time machine
 - [ ] Chat

@@ -1,3 +1,5 @@
+import type { GameEvent, GameTime, Order, PlayerView } from './types.js';
+
 /**
  * Shapes shared by the HTTP API and the Socket.IO connection. Living next to
  * the engine means the server and the Angular client can't drift apart.
@@ -17,14 +19,106 @@ export interface ApiError {
   error: string;
 }
 
+export type GameStatus = 'lobby' | 'running' | 'finished';
+
+export interface GameSeat {
+  userId: string;
+  username: string;
+  seat: number;
+  /** Engine player id ('p1', ...); assigned when the game starts. */
+  playerId: string | null;
+}
+
+/** A game as listed in the lobby. */
+export interface GameSummary {
+  id: string;
+  name: string;
+  status: GameStatus;
+  maxPlayers: number;
+  /** Game minutes per real minute (1 = real time). */
+  speed: number;
+  createdBy: string;
+  createdAt: string;
+  startedAt: string | null;
+  players: GameSeat[];
+  winner: string | null;
+}
+
+export interface CreateGameRequest {
+  name: string;
+  maxPlayers: number;
+  speed: number;
+}
+
+/** Allowed speeds, offered as presets in the UI. */
+export const GAME_SPEEDS = [
+  { speed: 1, label: 'Real time (days)' },
+  { speed: 60, label: 'Fast: 1 game hour per minute' },
+  { speed: 240, label: 'Blitz: 4 game hours per minute' },
+] as const;
+
+export const GAME_NAME_MAX_LENGTH = 40;
+
+// --- Live games ------------------------------------------------------------
+
+/** An order as the client submits it; the server fills in `at` and `player`. */
+export type OrderInput = Order extends infer O ? (O extends Order ? Omit<O, 'at' | 'player'> : never) : never;
+
+/** An order accepted by the server that has not executed yet. Cancellable. */
+export interface PendingOrder {
+  id: string;
+  order: Order;
+}
+
+/**
+ * Maps real time to game time: game minute = (now - startedAt) in minutes
+ * × speed. `serverNow` lets the client correct for clock skew.
+ */
+export interface GameClock {
+  startedAt: string;
+  speed: number;
+  serverNow: string;
+}
+
+/** Everything a player's client needs to render a game. */
+export interface GameSnapshot {
+  gameId: string;
+  view: PlayerView;
+  pendingOrders: PendingOrder[];
+  clock: GameClock;
+  /** Recent events this player is allowed to know about (newest last). */
+  events: GameEvent[];
+}
+
+export type Ack<T> = (result: ({ ok: true } & T) | { ok: false; error: string }) => void;
+
+export interface IssueOrderRequest {
+  gameId: string;
+  order: OrderInput;
+  /**
+   * Schedule for a later game minute (time machine). Omit to execute as soon
+   * as allowed: launches after `LAUNCH_DELAY`, other orders on the next tick.
+   */
+  at?: GameTime;
+}
+
 /** Events the server sends to the client over Socket.IO. */
 export interface ServerToClientEvents {
   hello: (payload: { user: PublicUser; serverTime: string }) => void;
+  /** Something in the lobby changed; refetch the game list. */
+  lobbyChanged: () => void;
+  /** New state for a game this socket is watching. */
+  gameUpdate: (snapshot: GameSnapshot) => void;
 }
 
 /** Events the client sends to the server over Socket.IO. */
 export interface ClientToServerEvents {
   ping: (ack: (serverTime: string) => void) => void;
+  /** Subscribe to a game you play in; acks with the current snapshot. */
+  watchGame: (gameId: string, ack: Ack<{ snapshot: GameSnapshot }>) => void;
+  unwatchGame: (gameId: string) => void;
+  issueOrder: (request: IssueOrderRequest, ack: Ack<{ pending: PendingOrder }>) => void;
+  cancelOrder: (request: { gameId: string; orderId: string }, ack: Ack<object>) => void;
 }
 
 /** Validation rules, shared so the client can validate before submitting. */

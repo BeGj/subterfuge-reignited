@@ -45,13 +45,23 @@ export const SHIELD_FULL_CHARGE_TIME = 48 * HOUR;
 // --- Mining --------------------------------------------------------------
 
 export const NEPTUNIUM_TO_WIN = 200;
+/**
+ * Neptunium is stored as integer units: 1 kg = one day's worth of minutes.
+ * Each mine adds (outposts owned) units per minute, i.e. 1 kg/day per outpost.
+ */
+export const NEPTUNIUM_UNIT = DAY;
 /** Fraction of Neptunium lost when one of your mines is captured. */
 export const MINE_LOSS_PENALTY = 0.2;
 
-// --- Visibility ----------------------------------------------------------
+// --- Movement & visibility -----------------------------------------------
+
+/** Map units a sub travels per game minute at 1.0 speed. */
+export const SUB_SPEED = 1;
 
 /** Sonar range expressed as travel time at 1.0 speed. */
 export const SONAR_RANGE_TRAVEL_TIME = 27 * HOUR;
+/** Sonar range in map units. */
+export const SONAR_RANGE = SONAR_RANGE_TRAVEL_TIME * SUB_SPEED;
 
 // --- Funding -------------------------------------------------------------
 

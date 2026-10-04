@@ -1,0 +1,82 @@
+<section class="card" aria-labelledby="outpost-title">
+  <h2 id="outpost-title">{{ outpost().name }}</h2>
+  <dl>
+    <dt>Type</dt>
+    <dd>{{ typeLabel() }}</dd>
+    <dt>Owner</dt>
+    <dd>{{ ownerLabel() }}</dd>
+    @if (outpost().drillers !== undefined) {
+      <dt>Drillers</dt>
+      <dd>{{ outpost().drillers }}</dd>
+    }
+    @if (outpost().shieldMax !== undefined) {
+      <dt>Shield</dt>
+      <dd>
+        {{ outpost().shieldCharge }} / {{ outpost().shieldMax }}
+        @if (outpost().shieldEnabled === false) {
+          <span class="muted">(off)</span>
+        }
+      </dd>
+    }
+    @if (specialistsHere().length) {
+      <dt>Specialists</dt>
+      <dd>
+        @for (s of specialistsHere(); track s.id) {
+          <span class="chip">
+            {{ specialistName(s.kind, s.owner) }}
+            @if (s.captiveOf) {
+              · captive
+            }
+          </span>
+        }
+      </dd>
+    }
+  </dl>
+
+  @if (isMine()) {
+    @if (!launching()) {
+      <div class="actions">
+        <button type="button" class="primary" [disabled]="busy()" (click)="launchStart.emit()">Launch…</button>
+        @if (outpost().type !== 'mine') {
+          <button type="button" [disabled]="busy() || !canDrill()" (click)="drill()">
+            Drill mine ({{ drillCost() }})
+          </button>
+        }
+        <button type="button" [disabled]="busy()" (click)="toggleShield()">
+          Shield {{ outpost().shieldEnabled === false ? 'on' : 'off' }}
+        </button>
+      </div>
+    } @else {
+      <form class="launch" (submit)="onLaunch($event)" novalidate>
+        <p>
+          @if (target(); as t) {
+            To <strong>{{ t.name }}</strong> · arrives in {{ travel() }}
+          } @else {
+            <span class="muted">Pick a target on the map.</span>
+          }
+        </p>
+        <label for="launch-drillers">Drillers (max {{ outpost().drillers }})</label>
+        <input
+          id="launch-drillers"
+          type="number"
+          inputmode="numeric"
+          [formField]="launchForm.drillers"
+          [attr.aria-invalid]="launchForm.drillers().invalid()"
+          aria-describedby="launch-drillers-error"
+        />
+        <p id="launch-drillers-error" class="error">{{ launchForm.drillers().errors()[0]?.message }}</p>
+        @for (spec of launchForm.specialists; track $index) {
+          <label class="check">
+            <input type="checkbox" [formField]="spec.selected" />
+            {{ spec.label().value() }}
+          </label>
+        }
+        <div class="actions">
+          <button type="submit" class="primary" [disabled]="busy() || !target()">Send</button>
+          <button type="button" (click)="launchCancel.emit()">Cancel</button>
+        </div>
+      </form>
+    }
+  }
+  <p class="error" role="alert">{{ error() }}</p>
+</section>

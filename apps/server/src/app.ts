@@ -5,9 +5,11 @@ import fastifyStatic from '@fastify/static';
 import type { Config } from './config.ts';
 import type { Sql } from './db.ts';
 import { authRoutes } from './auth/routes.ts';
+import type { EventBus } from './events.ts';
+import { lobbyRoutes } from './games/lobby-routes.ts';
 
 /** Builds the HTTP app. Kept separate from `main.ts` so tests can use `app.inject()`. */
-export async function buildApp(config: Config, sql: Sql): Promise<FastifyInstance> {
+export async function buildApp(config: Config, sql: Sql, events: EventBus): Promise<FastifyInstance> {
   const options: FastifyServerOptions = {
     logger: { level: process.env['LOG_LEVEL'] ?? 'info' },
     // Off by default: X-Forwarded-For is client-controlled unless a trusted proxy sets it.
@@ -16,7 +18,10 @@ export async function buildApp(config: Config, sql: Sql): Promise<FastifyInstanc
   const app = Fastify(options);
 
   await app.register(fastifyCookie);
+  // Declared at the root so every route plugin shares it (set by requireUser).
+  app.decorateRequest('user', null);
   await app.register(authRoutes, { sql, cookieSecure: config.cookieSecure });
+  await app.register(lobbyRoutes, { sql, events });
 
   app.get('/api/health', async () => {
     await sql`SELECT 1`;

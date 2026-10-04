@@ -33,14 +33,38 @@ The browser never receives the full game state. Before anything is sent to a pla
 
 The server runs the engine for real. The client runs it on its *visible* state to preview outcomes and to schedule orders.
 
-### 3. Simulate from event to event, not tick by tick
-The game is slow: things happen hours apart. Rather than looping every tick, the simulation keeps a queue of upcoming events and jumps from one to the next. Events include sub arrivals, factory cycles, hire timers and shield milestones. Event times are rounded to 10-minute ticks to match the original game. A per-game **time scale** maps game time to real time, so quick games can run faster. *(Planned.)*
+### 3. Fixed 10-minute ticks
+Everything in Subterfuge is aligned to 10-minute ticks, so the engine simply steps one tick at a time (`advance` in `simulation.ts`). A 10-day game is about 1,440 ticks, which is cheap. This is simpler than an event queue and just as deterministic. See [engine.md](engine.md).
 
-### 4. Orders are an event log, plus snapshots
-A game's state is its starting seed plus every order, replayed through the engine. This makes replays, debugging, reconnecting and the time machine straightforward. Periodic snapshots keep replays fast. Scheduled orders are ordinary orders with a future timestamp. *(Planned.)*
+### 4. Game state = seed + orders, replayed
+Postgres stores games, players and orders, never game state. To load a game, the server runs `generateMap(seed)` and replays all orders that weren't cancelled. Scheduled orders are ordinary orders with a future `at`. This makes reconnecting, restarts and debugging simple, and later the time machine too. There are **no snapshots yet**: replaying 90 game days takes about 0.25 s (numbers are in [engine.md](engine.md#performance)). Add them only if loads get slow.
 
-### 5. A restart-safe scheduler
-Each game stores its `next_event_at` in Postgres. A worker loop wakes games that are due, so a server restart loses nothing. There are no long-lived in-memory timers holding game state. *(Planned.)*
+### 5. Game time comes from the wall clock
+`game minute = (now − started_at) × speed`. Nothing about the clock is stored or scheduled. The runtime checks every second whether a game has reached a new tick, advances it, and pushes updates. A restart loses nothing: the next load replays to "now".
+
+### 6. Fog of war, and the one deliberate exception
+`viewFor` hides everything outside a player's sonar, apart from outpost positions and the type of mines. The exception is the **leaderboard**: every player's Neptunium, outpost count and mines drilled (`PlayerPublic`) are visible to everyone. That mirrors the original game, and makes everyone's next drill cost public. Anything else added to `PlayerView` must be fogged.
+
+## Game runtime (`apps/server/src/games/runtime.ts`)
+
+- On startup and when a game starts, the runtime **loads** the game: it generates the map from the seed and replays the stored orders up to the current tick.
+- Every second it **advances** each running game to its current tick. It then sends each player their own `GameSnapshot` (`viewFor` + pending orders + recent visible events) through their private Socket.IO room `game:<id>:<playerId>`.
+- **Orders** arrive over Socket.IO:
+  1. `parseOrderInput` checks the untrusted payload's structure.
+  2. The runtime catches the game up to now and picks the execution time (`LAUNCH_DELAY` for launches).
+  3. `validateOrder` checks the rules.
+  4. The order is stored in Postgres and added to the pending list.
+  - While an order is being written, that game's tick waits, so an order can never land in a tick that has already run.
+- **Abuse limits:**
+  - 60 order submissions or cancellations per player per real minute
+  - at most 100 waiting orders per player
+  - scheduling at most 7 game days ahead
+  - at most 5 watched games per connection
+  These keep the order log, which is replayed on every load, small.
+- Each player has their own **event buffer** (the last 100 events they may see). Events are filtered first and trimmed after, so a busy game can't push one player's events out.
+- When a player is **eliminated**, their waiting orders are cancelled. When the game **ends** (a win or a draw), it's marked `finished` (`winner` is NULL for a draw).
+- **Stale games:** there's no abandon/delete for running games yet. Players can resign, and the last one standing wins. A game everyone stops playing keeps running, which is cheap, but stays in memory.
+- The full protocol is in [api.md](api.md).
 
 ## Request flow
 

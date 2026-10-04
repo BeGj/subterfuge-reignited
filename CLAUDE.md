@@ -2,7 +2,7 @@
 
 A web clone of the strategy game Subterfuge.
 - **Game rules:** `goal.md`. This is the source of truth for mechanics.
-- **Architecture:** `docs/architecture.md`.
+- **Architecture:** `docs/architecture.md`. Engine details: `docs/engine.md`. API: `docs/api.md`.
 
 ## Layout
 - `packages/engine/` holds the pure, deterministic rules and the shared wire types (`src/protocol.ts`). It is compiled with tsc, and imports use `.js` extensions.

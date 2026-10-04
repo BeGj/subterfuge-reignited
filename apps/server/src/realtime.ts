@@ -3,6 +3,7 @@ import { fastifyCookie } from '@fastify/cookie';
 import { Server } from 'socket.io';
 import type { ClientToServerEvents, PublicUser, ServerToClientEvents } from '@subterfuge/engine';
 import type { Sql } from './db.ts';
+import type { EventBus } from './events.ts';
 import { SESSION_COOKIE, findSessionUser } from './auth/sessions.ts';
 
 interface SocketData {
@@ -16,7 +17,7 @@ export type RealtimeServer = Server<ClientToServerEvents, ServerToClientEvents, 
  * browser sends the session cookie with the handshake and we reuse the
  * normal session lookup. Unauthenticated sockets are rejected.
  */
-export function createRealtime(httpServer: HttpServer, sql: Sql): RealtimeServer {
+export function createRealtime(httpServer: HttpServer, sql: Sql, events: EventBus): RealtimeServer {
   const io: RealtimeServer = new Server(httpServer, { serveClient: false });
 
   io.use(async (socket, next) => {
@@ -34,6 +35,9 @@ export function createRealtime(httpServer: HttpServer, sql: Sql): RealtimeServer
     socket.emit('hello', { user, serverTime: new Date().toISOString() });
     socket.on('ping', (ack) => ack(new Date().toISOString()));
   });
+
+  // Lobby changes are public (anyone can browse games), so tell everyone.
+  events.on('lobbyChanged', () => io.emit('lobbyChanged'));
 
   return io;
 }

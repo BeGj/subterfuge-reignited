@@ -1,0 +1,74 @@
+<header>
+  <a routerLink="/" class="back">← Lobby</a>
+  @if (view()) {
+    <span class="time" aria-live="off">{{ timeLabel() }}</span>
+    <span class="muted">{{ speedLabel() }}</span>
+  }
+  <span class="status" [class]="realtime.status()" role="status">{{ realtime.status() }}</span>
+</header>
+
+@if (error()) {
+  <main class="message card" role="alert">
+    <h1>Can't open this game</h1>
+    <p>{{ error() }}</p>
+    <a routerLink="/" class="button primary">Back to the lobby</a>
+  </main>
+} @else if (snapshot(); as snap) {
+  <div class="layout">
+    <sub-game-map
+      class="map"
+      [view]="snap.view"
+      [clock]="clock()!"
+      [selectedId]="selectedId()"
+      [launchFromId]="launchFromId()"
+      [launchTargetId]="launchTargetId()"
+      (outpostClick)="onMapClick($event)"
+    />
+    <aside class="sidebar" aria-label="Game panels">
+      @if (winnerText()) {
+        <section class="card winner" role="status">
+          <h2>{{ winnerText() }}</h2>
+          <p>The game is over.</p>
+        </section>
+      }
+      @if (selected(); as outpost) {
+        <sub-outpost-panel
+          [gameId]="snap.gameId"
+          [view]="snap.view"
+          [outpost]="outpost"
+          [launching]="launchFromId() === outpost.id"
+          [launchTargetId]="launchTargetId()"
+          (launchStart)="startLaunch()"
+          (launchCancel)="cancelLaunch()"
+        />
+      } @else {
+        <p class="card muted">Select an outpost on the map or in the list below.</p>
+      }
+      <sub-orders-panel [gameId]="snap.gameId" [view]="snap.view" [pending]="snap.pendingOrders" [minute]="minute()" />
+      <sub-status-panel
+        [view]="snap.view"
+        [minute]="minute()"
+        [selectedId]="selectedId()"
+        (select)="selectOutpost($event)"
+      />
+      <sub-events-panel [view]="snap.view" [events]="snap.events" />
+      @if (canResign()) {
+        <section class="card resign" aria-labelledby="resign-title">
+          <h2 id="resign-title">Leave the game</h2>
+          @if (confirmingResign()) {
+            <p>Resigning eliminates you for good. Your outposts stay on the map.</p>
+            <div class="row">
+              <button type="button" class="danger" (click)="resign()">Yes, resign</button>
+              <button type="button" (click)="confirmingResign.set(false)">Keep playing</button>
+            </div>
+          } @else {
+            <button type="button" (click)="confirmingResign.set(true)">Resign…</button>
+          }
+          <p class="error" role="alert">{{ resignError() }}</p>
+        </section>
+      }
+    </aside>
+  </div>
+} @else {
+  <p class="message muted" role="status">Loading game…</p>
+}

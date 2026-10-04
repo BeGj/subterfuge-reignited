@@ -1,0 +1,133 @@
+import { Component, computed, inject, input, linkedSignal, output, signal, untracked } from '@angular/core';
+import { FormField, form, max, min, submit } from '@angular/forms/signals';
+import { mineDrillCost, type OrderInput, type OutpostView, type PlayerView } from '@subterfuge/engine';
+import { Realtime } from '../../../core/realtime';
+import { namesFor } from '../describe';
+import { formatDuration } from '../format';
+import { travelMinutes } from '../geometry';
+
+const TYPE_LABELS: Record<string, string> = { factory: 'Factory', generator: 'Generator', mine: 'Mine' };
+
+/**
+ * Details of the selected outpost, plus actions when it's yours: launch a
+ * sub (target picked on the map), drill a mine, toggle the shield.
+ */
+@Component({
+  selector: 'sub-outpost-panel',
+  imports: [FormField],
+  templateUrl: './outpost-panel.html',
+  styleUrl: './outpost-panel.css',
+})
+export class OutpostPanel {
+  private readonly realtime = inject(Realtime);
+
+  readonly gameId = input.required<string>();
+  readonly view = input.required<PlayerView>();
+  readonly outpost = input.required<OutpostView>();
+  /** Target chosen on the map while launching. */
+  readonly launchTargetId = input<string | null>(null);
+  readonly launching = input(false);
+
+  readonly launchStart = output<void>();
+  readonly launchCancel = output<void>();
+
+  protected readonly error = signal('');
+  protected readonly busy = signal(false);
+
+  protected readonly names = computed(() => namesFor(this.view()));
+  protected readonly isMine = computed(() => this.outpost().owner === this.view().you);
+  protected readonly typeLabel = computed(() => TYPE_LABELS[this.outpost().type ?? ''] ?? 'Unknown');
+  protected readonly ownerLabel = computed(() => {
+    const owner = this.outpost().owner;
+    if (owner === undefined) return 'Unknown (outside sonar)';
+    if (owner === null) return 'Dormant';
+    return this.names().player(owner);
+  });
+
+  protected readonly specialistsHere = computed(() =>
+    this.view().specialists.filter((s) => 'outpost' in s.location && s.location.outpost === this.outpost().id),
+  );
+
+  /** Your specialists here that can board a sub. */
+  private readonly boardable = computed(() =>
+    this.specialistsHere().filter((s) => s.owner === this.view().you && s.captiveOf === null),
+  );
+
+  protected readonly drillCost = computed(() => {
+    const me = this.view().players.find((p) => p.id === this.view().you);
+    return mineDrillCost(me?.minesDrilled ?? 0);
+  });
+  protected readonly canDrill = computed(() => {
+    const o = this.outpost();
+    return this.isMine() && o.type !== 'mine' && (o.drillers ?? 0) >= this.drillCost();
+  });
+
+  protected readonly target = computed(() => this.view().outposts.find((o) => o.id === this.launchTargetId()));
+  protected readonly travel = computed(() => {
+    const target = this.target();
+    return target ? formatDuration(travelMinutes(this.outpost().position, target.position)) : '';
+  });
+
+  /**
+   * Launch form. Resets only when a different outpost is selected or the
+   * specialists there change — not on every server update, which would wipe
+   * what the player typed. The `max` validator tracks the live driller count.
+   */
+  protected readonly launchModel = linkedSignal({
+    source: () => `${this.outpost().id}|${this.boardable().map((s) => s.id).join(',')}`,
+    computation: () => ({
+      drillers: untracked(() => this.outpost().drillers ?? 0),
+      specialists: untracked(() => this.boardable()).map((s) => ({
+        id: s.id,
+        label: s.kind === 'queen' ? 'Queen' : s.kind,
+        selected: false,
+      })),
+    }),
+  });
+  protected readonly launchForm = form(this.launchModel, (path) => {
+    min(path.drillers, 0, { message: 'Cannot be negative.' });
+    max(path.drillers, () => this.outpost().drillers ?? 0, { message: 'Not that many drillers here.' });
+  });
+
+  protected specialistName(kind: string, owner: string): string {
+    return `${kind === 'queen' ? 'Queen' : kind} (${this.names().player(owner)})`;
+  }
+
+  protected onLaunch(event: Event): void {
+    event.preventDefault();
+    const target = this.target();
+    if (!target) return;
+    void submit(this.launchForm, async () => {
+      const { drillers, specialists } = this.launchModel();
+      const chosen = specialists.filter((s) => s.selected).map((s) => s.id);
+      if (drillers === 0 && chosen.length === 0) {
+        this.error.set('Send at least one driller or specialist.');
+        return;
+      }
+      const ok = await this.send({ kind: 'launch', from: this.outpost().id, to: target.id, drillers, specialists: chosen });
+      if (ok) this.launchCancel.emit();
+    });
+  }
+
+  protected drill(): Promise<boolean> {
+    return this.send({ kind: 'drillMine', outpost: this.outpost().id });
+  }
+
+  protected toggleShield(): Promise<boolean> {
+    return this.send({ kind: 'setShield', outpost: this.outpost().id, enabled: !(this.outpost().shieldEnabled ?? true) });
+  }
+
+  private async send(order: OrderInput): Promise<boolean> {
+    this.error.set('');
+    this.busy.set(true);
+    try {
+      await this.realtime.issueOrder({ gameId: this.gameId(), order });
+      return true;
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Order failed.');
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}
