@@ -87,12 +87,12 @@ Constant area costs small games some travel time (9.5 h between neighbours at 2 
 **Why:** the three workspaces share `packages/engine`, so a change in one can break another with no local signal. The DB tests skip when Postgres is down, which would silently drop 18 tests without the service. The Docker job catches what `npm test` can't: the image compiles the Angular bundle and runs the server's TypeScript directly.
 
 ### 2026-10-04 — Known limitation: loaded games are never unloaded
-**Status: planned** (fix tracked in [handoff.md §4.1](handoff.md)).
+**Status: planned** (tracked in [roadmap.md → Now, item 1](roadmap.md)).
 **Decision:** `GameRuntime.games` only ever grows. Finished games, and finished games opened for viewing, stay in memory.
 **Why it's acceptable for now:** we're pre-release with few games. A reload is cheap (see the replay numbers above) and the next `get()` would rebuild it anyway.
 
 ### 2026-10-04 — Ending stale games will be an agreed engine order, not a status flag
-**Status: planned, design agreed** (see [handoff.md §4.2](handoff.md)).
+**Status: planned, design agreed** (see [roadmap.md → Now, item 2](roadmap.md)).
 **Decision (not built yet):** a `voteEnd`-style order. When all remaining players agree, the engine ends the game with no winner, reusing the draw path.
 **Why:**
 

@@ -46,109 +46,13 @@ These come from the user, or are load-bearing for the architecture:
 - **Keep the docs current:** the README status, the relevant `docs/*.md`, and `docs/decisions.md` for any non-obvious choice. Update this handoff file when priorities change.
 - **Commits:** only when the user asks. End messages with the Co-Authored-By line given in the session.
 
-## 4. Backlog, in suggested order
+## 4. Backlog
 
-Each item notes the design work already done.
-
-### 4.0 Done since the last handoff
-- **CI** (`.github/workflows/ci.yml`): runs §7 on pushes to `main` and on PRs. The Postgres service matters: the DB-backed tests skip themselves when the database is unreachable, so a run without it would silently drop 18 of them.
-- **Smoke test** (`scripts/smoke.mjs`, `npm run smoke`): plays a real 2-player game over HTTP and Socket.IO — register, create, join, start, capture of a dormant outpost, and a fog-of-war isolation check. Runs in CI too. This is what would have caught a broken lobby-to-game path.
-- **Lobby rate limits**: creating and joining games are limited per user, because each mutation broadcasts `lobbyChanged` and makes every open client refetch the list.
-- **Single-replica constraint documented** in `docs/decisions.md`: the runtime is in-process, so a second app replica would derive two divergent states per game. Don't scale the app until that's fixed.
-- **Map geometry**: the map is now a constant 4000-unit square at every player count, so small games have fog of war (2 players went from seeing 99 % of the map to 59–76 %). Costs 9.5 h of travel between neighbours at 2 players instead of 6.7 h. `npm run map:stats -w @subterfuge/engine` prints the table; `SPACING_SCALE_EXPONENT` is the dial.
-
-- **Rules versioning** (`RULES_VERSION`, migration 003): games store the rules version they started under. The runtime ends, rather than replays, a game whose version differs, with `end_reason = 'rulesChanged'`. **Bump the version when map/simulation output changes** (CLAUDE.md). Without this, the map change above silently rewrote running games on restart.
-
-- **Playtest round 2:**
-  - Enemy launches are visible shortly before they happen (warning routes; included in forecasts).
-  - Per-game setting to show outpost owners outside sonar.
-  - "Refresh to update" banner when the client is outdated after a deploy.
-  - Planned launches show their trip length instead of a countdown.
-  - Subs show a faint trail back to their origin, clipped to your sonar (you can't have watched them outside it).
-
-### 4.1 Unload finished and idle games from memory (small, recommended next)
-- **Problem:** `GameRuntime.games` (`apps/server/src/games/runtime.ts`) only ever grows.
-  - Finished games stay in memory forever.
-  - Opening a finished game (`watchGame`) also loads it, and it never leaves.
-- **Plan:** unload a game a while after it ends, or after nobody has watched it for N minutes. The next `get()` reloads it from the order log.
-  - Use Socket.IO room membership (`io.sockets.adapter.rooms`) or a last-watched timestamp.
-  - Running games must stay loaded, since the loop needs them.
-- Add a runtime DB test.
-- Record the policy in `docs/decisions.md`.
-
-### 4.2 End a stale game by agreement (small)
-- There is currently no way to end a running game except winning, a draw, or everyone else resigning.
-- **Agreed design** (from discussion with the user):
-  - No new status. A finished game with `winner = NULL` already means "ended, nobody won" (same shape as a draw).
-  - Implement it as an **engine order**, e.g. `{ kind: 'voteEnd' }` and its cancellation. When all non-eliminated players have voted, the engine sets `endedAt` with no winner (reuse the draw path). The existing runtime `finish()` then marks the game finished. It must be an order so replays agree (§3).
-  - **Not creator-only:** a losing creator could otherwise wipe out everyone else's game. A player who refuses can still be bypassed by others resigning.
-- **Client:** a "Propose ending the game" control next to Resign, showing who has agreed.
-
-### 4.3 Specialists (large: the main missing game feature)
-- **Rules:** `goal.md` → Specialists (hiring every 18h from game hour 4; offers of 3, one per category; decks with 3 copies of each; promotion). The full table, with effects, priorities and promotions, is in goal.md.
-- **Suggested first set** (goal.md open question): Princess, Helmsman, Lieutenant → General, Inspector → Security Chief, Foreman, Thief, Navigator, Intelligence Officer. Do the complex ones later (Martyr, Double Agent, Pirate, Hypnotist, Revered Elder).
-- **Engine work:**
-  - `SpecialistKind` gains the new kinds.
-  - New orders: `hire` (choose from the current offer) and `promote`.
-  - The offer must be deterministic from the seed (decks dealt with `createRandom`) and stored in the state.
-  - Combat's "specialist phase" (`combat.ts` currently only uses specialist counts as a tie-break) needs priorities.
-  - Speed modifiers go into `travelTime` and `subPosition`. Decide how multiple speed bonuses combine; goal.md suggests "fastest wins" as a house rule.
-- **Visibility:** specialists at visible locations are already in `PlayerView.specialists`. Hire offers must be visible only to their owner.
-- **Client:** a hire panel, specialist icons on the map, and specialist checkboxes in the launch form (they exist already for the Queen).
-- **Tip:** do this contracts-first with parallel agents (§6). Types and stubs first, then agents per specialist group, each with its own tests.
-
-### 4.4 Time machine (done; known gaps)
-- **Engine:** `forecast.ts` (`stateFromView`, `forecast`, `predictArrivals`), plus combat `details` on combat events.
-- **Client** (`pages/game/time-machine.ts`, a service provided per game page): the time bar under the map has Now, Play, +1h, +6h, +1d and a slider.
-  - While scrubbed, the map and panels show the forecast, framed in yellow.
-  - Orders given while scrubbed are scheduled for that time and checked against the forecast first.
-  - Battle icons (green ✓, red ✕, grey ?) open a summary.
-  - The sub, pending-order and battle panels have "Jump to arrival", which **animates** through time (eased, 0.5–1.8 s), as do +1h, +6h and +1d. Animation is instant when reduced motion is preferred.
-  - In a forecast, other players' leaderboard numbers stay live; the forecast only knows their visible outposts.
-  - The launch form shows a live prediction ("Loses: needs about 10 more drillers").
-- **Gaps:**
-  - No scrubbing into the **past**. It would need the client to keep earlier snapshots.
-  - Playback has a fixed rate (`PLAY_RATE`).
-  - Predictions ignore enemy plans and anything outside sonar, as the original does.
-- Server support exists: `issueOrder` accepts a future `at`, and scheduled orders appear in `pendingOrders`.
-- The client needs:
-  - a time slider
-  - a preview that runs `advance()` on the player's **visible** state plus their pending orders. This needs a "view → simulatable state" adapter; hidden enemy data is simply absent.
-  - "schedule at this time" for orders
-- Scrubbing into the past would need the history of the player's views. Simplest is to keep received snapshots on the client.
-
-### 4.5 Chat (medium)
-- Public and private (any group of players) chat per game.
-- **Proposed design:**
-  - a new `messages` table: `game_id`, `from_user`, `recipients` (`uuid[]`, NULL = public), `body`, `created_at`
-  - Socket.IO events
-  - a per-user rate limit (reuse `RateLimiter`)
-- Chat is not game state, so it doesn't go through the engine.
-
-### 4.6 Activity tracking: auto-resign and auto-end (small–medium, do both together)
-- `INACTIVITY_AUTO_RESIGN` (48h) is not implemented. It's **real** time, so the server needs "last activity per player", e.g. the newest order or a heartbeat on `watchGame`.
-- Auto-resign must still be written as a `resign` **order**, so replays match.
-- The same data enables auto-ending abandoned games.
-
-### 4.7 Smaller items
-- **Funding** (goal.md → Funding): a new order and economy hooks in `economy.ts` (the funding constants already exist).
-- **Domination mode:** a game setting that turns off mines and adds an outpost-count win condition.
-- **Princess promotion when the Queen is lost.** Gifting Queens is currently rejected because of this.
-- **Map tuning:**
-  - ~~2-player maps have almost no fog~~ — fixed: constant map area, see §4.0. Worth a human playtest to confirm 9.5 h at 2 players isn't too slow.
-  - 10-player balance spread is 2–4 outposts, against about 2 in the original.
-- **Client:**
-  - pinch-zoom on touch
-  - component-level tests (only helpers are tested)
-  - narrow-screen layout is untested in a browser
-- **Specialist capture and loss events:** individual events are missing (noted in `docs/engine.md`).
+**See [roadmap.md](roadmap.md).** It's the single list of what's next (in order), with designs already agreed, and a log of what's done.
 
 ## 5. Open decisions for the user
 
-From goal.md, still unanswered:
-- **Shield ratio:** 1/3 strong (current) or 2/3 (developer quote). It's `STRONG_SHIELD_SHARE`.
-- Which specialists go in the first release (see 4.3).
-- Domination mode: whether to build it, and the outpost target per player count.
+Listed in [roadmap.md → Open decisions](roadmap.md#open-decisions-need-the-user).
 
 ## 6. How work has been done (lessons for agents)
 

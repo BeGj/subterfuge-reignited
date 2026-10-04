@@ -2,7 +2,7 @@
 
 A web clone of the strategy game Subterfuge.
 - **Game rules:** `goal.md`. This is the source of truth for mechanics.
-- **Start here when picking up work:** `docs/handoff.md`. It covers current state, backlog, open decisions and lessons learned.
+- **Start here when picking up work:** `docs/handoff.md` (current state, lessons learned), then `docs/roadmap.md` (what's next, open decisions).
 - **Architecture:** `docs/architecture.md`. Engine details: `docs/engine.md`. API: `docs/api.md`.
 
 ## Layout
@@ -19,7 +19,7 @@ A web clone of the strategy game Subterfuge.
   - `README.md` status checklist
   - `docs/*.md`
   - `docs/decisions.md` for any non-obvious choice
-  - `docs/handoff.md` backlog, whenever priorities change or an item is done
+  - `docs/roadmap.md`, whenever priorities change or an item is done
 - **Game state changes only through engine orders.** A reload replays orders, so anything changed outside them is lost.
 - **Bump `RULES_VERSION`** (`packages/engine/src/constants.ts`) whenever a change alters what `generateMap` or `advance` produce for the same input. Running games started under another version are ended rather than replayed wrongly. Add a line to its history comment.
 

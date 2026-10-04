@@ -243,4 +243,4 @@ Answered (details in `docs/`):
 - **Shield after capture:** an attacker only wins once the shield is drained, so a captured outpost starts at 0 charge and recharges from there.
 - **Distance scale:** map units with `SUB_SPEED` = 1 unit per game minute. Every map is 4000 units square, so neighbouring outposts are about 6.3 travel-hours apart at 10 players and 9.5 h at 2. Sonar is 1620 units (27 h). See `docs/engine.md` and `npm run map:stats -w @subterfuge/engine`.
 
-For the full backlog and what to build next, see [docs/handoff.md](docs/handoff.md).
+For what to build next, see [docs/roadmap.md](docs/roadmap.md).
