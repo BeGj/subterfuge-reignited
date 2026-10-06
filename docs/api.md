@@ -60,6 +60,10 @@ Every acknowledgement is either `{ ok: true, ... }` or `{ ok: false, error }`.
   imminentLaunches: LaunchOrder[], // enemy launches about to happen that you'd see (still cancellable)
 }
 ```
+`view.hiring` is your own hiring state only (`{ nextOfferAt, offer }`; other players' offers are never sent). `OutpostView.shieldMax` stays the outpost's **base** maximum; `shieldMaxEffective` is the maximum including specialists (Queen, Security Chief, King), which is what the shield charges to.
+
+Specialist events: `specialistOffered` (only to you), `specialistHired`, `specialistPromoted` and `queenSucceeded` (everyone), `specialistCaptured` (the captor and the owners), `specialistDestroyed` (the owners), and `subRedirected` (the sub's owner).
+
 The current game minute is `(now − startedAt) / 60000 × speed`. Use `serverNow` to correct for the difference between your clock and the server's.
 
 ### Orders
@@ -68,6 +72,9 @@ The current game minute is `(now − startedAt) / 60000 × speed`. Use `serverNo
 - `{ kind: 'drillMine', outpost }`
 - `{ kind: 'setShield', outpost, enabled }`
 - `{ kind: 'resign' }`: you're eliminated on the next tick and your waiting orders are cancelled.
+- `{ kind: 'hire', choice }`: take `choice` (a `SpecialistKind`) from your current offer (`view.hiring.offer`). Needs your Queen, free, at one of your outposts; the specialist appears there.
+- `{ kind: 'promote', specialist }`: promote one of your specialists standing on one of your outposts (e.g. Lieutenant → General). Uses up the current offer instead of hiring.
+- `{ kind: 'redirect', sub, to }`: change the destination of your sub in flight (home included). It must carry a Navigator, and 8 game hours must have passed since its last redirect. The sub turns where it is at the end of the next tick; `Sub.origin` is the turn point and `launchedAt` the turn time.
 - `{ kind: 'voteEnd', agree }`: propose (`true`) or withdraw (`false`) ending the game with no winner. It ends once everyone still playing agrees. Votes are public (`PlayerView.endVotes`, `endVote` events).
 
 Limits:
@@ -79,7 +86,7 @@ Limits:
 - A **launch** becomes visible to another player once it's within `IMMINENT_LAUNCH_WINDOW` (20 game minutes) of executing, if they'd see the sub once launched: it leaves from an outpost inside their sonar, or it's heading for one of their outposts.
   - An immediate launch is therefore visible during its 10-minute launch delay, while you can still cancel it.
   - Scheduled launches stay secret until they get that close.
-- Other orders (drill, shield, resign) are never shown before they execute.
+- Other orders (drill, shield, resign, hire, promote, redirect) are never shown before they execute.
 
 ### Order timing
 - Without `at`, orders run as soon as allowed:

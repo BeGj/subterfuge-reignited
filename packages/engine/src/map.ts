@@ -9,6 +9,7 @@ import {
   WEAK_SHIELD_MAX,
 } from './constants.js';
 import { outpostNames } from './names.js';
+import { buildHiring } from './hiring.js';
 import { createRandom, type Random } from './random.js';
 import type { GameState, Outpost, OutpostType, Player, PlayerId, Point, Specialist } from './types.js';
 
@@ -318,6 +319,7 @@ function buildState(c: Candidate, options: GenerateMapOptions, rng: Random, size
     neptunium: 0,
     minesDrilled: 0,
     eliminated: false,
+    hiring: buildHiring(options.seed, id),
   }));
 
   return {

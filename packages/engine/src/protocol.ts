@@ -15,6 +15,18 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface RegisterRequest extends AuthCredentials {
+  /** Required when the server sets REGISTRATION_CODE. */
+  inviteCode?: string;
+}
+
+/** `GET /api/auth/registration`: what the sign-up form needs to ask for. */
+export interface RegistrationInfo {
+  inviteRequired: boolean;
+}
+
+export const INVITE_CODE_MAX_LENGTH = 200;
+
 export interface ApiError {
   error: string;
 }

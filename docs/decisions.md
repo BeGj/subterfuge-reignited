@@ -4,6 +4,61 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-06 — Security hardening for public hosting
+**Decision:** a shared invite code (`REGISTRATION_CODE`) instead of per-person invites; a CSP that allows inline *styles* but not inline scripts; critical-CSS inlining turned off in `angular.json`; Postgres published on 127.0.0.1 only.
+**Why:** the game can now be put on the internet (see [deployment.md](deployment.md)), while `docker compose up` with no settings must keep working on a plain machine; everything new is either always on and setup-free, or off by default. A single code is enough to keep strangers out of a friends' server without building an invite system. Angular injects component styles at runtime, so `style-src 'unsafe-inline'` is needed, but its critical-CSS step adds an inline `<script>`, and dropping that costs little. The database password is a public default, so the port must not be reachable from the network.
+
+### 2026-10-05 — Promotion uses up the hire offer
+**Decision:** `promote` needs a current offer and clears it, exactly like `hire`. It does **not** need the Queen at an outpost; only the promoted specialist must stand on one of your outposts.
+**Why:** goal.md → Hiring says you may promote "instead of hiring". The first implementation made promotion free and unlimited, which made every promotable hire a strict upgrade at no cost. goal.md only constrains where the promoted specialist is, so we don't add a Queen condition.
+
+### 2026-10-05 — Hypnotist is in batch 1
+**Decision:** the Hypnotist is hireable in batch 1.
+**Why:** the King, which the user confirmed for batch 1, is only reached by promoting a Hypnotist (goal.md). His own effect (take every prisoner at an outpost his side captures) is small and builds on the existing prisoner handling.
+
+### 2026-10-05 — A sub's speed is frozen at launch; redirects turn where the sub is
+**Decision:**
+- `Sub.speed` is set when the sub launches and kept for the trip.
+- A redirect starts a new leg at the sub's current position (`Sub.origin`, `launchedAt` = the turn), so the arrival is measured from there and the sub doesn't jump on the map. It applies after that tick's fights and arrivals.
+- Turning straight back stays on the lane; any other turn leaves every lane (`Sub.offLane`) and meets no sub on that leg.
+- Turning back home is allowed (the first version refused it).
+**Why:**
+- An Admiral hired or lost mid-trip would otherwise move ETAs that were already shown and scheduled against.
+- The first version measured the new trip from the launch outpost and kept the old route, which put the sub in the wrong place and gave the wrong ETA.
+- Subs only meet head-on on a lane. A turn onto a new course is off every lane in all but degenerate geometry, and a retreat must still meet a pursuer.
+- Applying the turn after the tick's fights stops a redirect from dodging a fight that the time machine shows is due that tick.
+
+### 2026-10-05 — Specialist combat details from the review
+**Decision:** a Thief steals only when attacking an outpost or in sub-vs-sub; specialists of equal priority read the numbers at the start of their tier and act together; an Engineer's repair counts everything lost in the fight (specialist phase included) and her local bonus counts when she rides the winning sub; an Inspector refills only when she arrives and after fights; with several Kings, each one's outpost gets its +20.
+**Why:** goal.md's wording for each, which the first implementation missed.
+
+### 2026-10-04 — Specialist effects go through one catalogue and one query layer
+**Decision:** new module `packages/engine/src/specialists.ts` holds `SPECIALISTS: Record<SpecialistKind, SpecialistDef>` (name, category, priority, blurb, `hireSize`, `promotesTo`) plus a pure query per number a specialist changes: `cargoSpeed`/`speedOf`, `shieldMaxAt`, `sonarRangeAt`, `productionBonusAt`, `productionRate`, `electricalBonusAt`, `drillerDestroyedInCombat`. Speed bonuses take the **fastest**, never a product (already the house rule in goal.md). Tycoon's "+50 % rate" is implemented as **+50 % drillers per cycle** rather than faster cycles. `PlayerView` gains `shieldMaxEffective` instead of changing the meaning of `shieldMax`.
+**Why:**
+- One place answers "what does this specialist do", so the engine, the client's panels and the hire cards can't drift, and adding a later-batch specialist is mostly a table entry.
+- Fastest-wins is goal.md's house rule; multiplying Helmsman + Smuggler + Admiral would be unreadable and unbalancing.
+- Tycoon's real rule needs per-factory production timers. The shared 8-hour cycle grid is load-bearing for the electrical cap, so we approximate with the same average output instead of reworking the tick loop.
+- `stateFromView` feeds `shieldMax` back into a `GameState`, where the bonuses are added again. Sending the base max plus an effective max keeps forecasts from double-counting the Queen's +20.
+
+### 2026-10-04 — Princesses succeed the Queen before a player is eliminated
+**Decision:** losing your Queen (captured, destroyed, or lost with nowhere to go) promotes your **nearest free Princess** to Queen; only a player with no Princess is eliminated. A **captured** Queen becomes a Princess of the captor. Gifting a Queen stays **rejected** ("The Queen cannot be gifted"), so Queen trading is out of v1.
+**Why:**
+- goal.md → The Queen and Princess. Without the succession check, capturing a Queen would always eliminate, and Princess would be dead weight.
+- The nearest Princess is measured from the lost Queen's position, ties broken by specialist id, so it's deterministic.
+- Gifted Queens were the user's call: keep the existing ban rather than opening up Queen trading in this batch.
+
+### 2026-10-04 — Specialist v1 scope
+**Decision:** batch 1 is Queen, Princess, Helmsman, Lieutenant→General, Thief, Navigator→Admiral, Foreman→Engineer, Inspector→Security Chief, Intelligence Officer (and Hypnotist→King, see 2026-10-05). The rest (Assassin, Infiltrator, Saboteur, Double Agent, Revered Elder, Martyr, Pirate, Smuggler, Sentry, War Hero, Diplomat, Tinkerer→Minister of Energy, Tycoon) follow later, each as its own rules-version bump.
+**Why:** the user's answer to goal.md's open question. Batch 1 covers every *mechanism* (hiring, promotion, the combat specialist phase, speed, shields, sonar, production, succession) so the later specialists are mostly table entries, and the King's −20 shield is implemented as written with a floor of 0.
+
+### 2026-10-04 — Hire offers: cards you don't pick are lost, one offer at a time
+**Decision:**
+- Decks hold 3 copies of every hireable kind per category, built from a per-player RNG stream (`fnv1a(seed:playerId)`), so hiring can't shift the map generator's draws.
+- One card is drawn per category at hour 4 and every 18 hours after. **All drawn cards leave the deck**, whether or not the player takes one; the other two are lost.
+- A new offer **replaces** the one you ignored, so a player has at most one pending offer.
+- The offer appears even if the Queen is away, but `hire` requires "a free Queen at one of your own outposts".
+**Why:** the rules don't say what happens to the two cards you decline. Losing them is the reading that matches a physical deck ("picking that specialist removes that card, so duplicates become less likely"), needs no extra state for where declined cards go, and bounds the offer to one per player. The per-player RNG keeps the offer deterministic on replay without disturbing map generation.
+
 ### 2026-10-04 — Shield ratio decided; shields drawn as rings of 10
 **Decision:**
 - 1/3 of outposts have a max shield of 20 and the rest 10 (`STRONG_SHIELD_SHARE`, unchanged). This is the user's call.

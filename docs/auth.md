@@ -30,7 +30,8 @@ Simple username + password accounts, built with Node's `crypto` module and Postg
 
 | Method & path | Body | Success | Errors |
 |---|---|---|---|
-| `POST /api/auth/register` | `{ username, password }` | `201` user + cookie | `400` invalid, `409` username taken, `429` |
+| `GET /api/auth/registration` | – | `200` `{ inviteRequired }` | – |
+| `POST /api/auth/register` | `{ username, password, inviteCode? }` | `201` user + cookie | `400` invalid, `403` wrong invite code, `409` username taken, `429` |
 | `POST /api/auth/login` | `{ username, password }` | `200` user + cookie | `400` invalid, `401` wrong credentials, `429` |
 | `POST /api/auth/logout` | – | `204` | – |
 | `GET /api/auth/me` | – | `200` user | `401` |
@@ -38,6 +39,10 @@ Simple username + password accounts, built with Node's `crypto` module and Postg
 A "user" is `{ id, username }` (`PublicUser` in `packages/engine/src/protocol.ts`).
 
 Protect other routes with the `requireUser(sql)` preHandler from `auth/routes.ts`. It sets `req.user` or replies `401`.
+
+## Invite code
+
+Set `REGISTRATION_CODE` to make sign-up require that code; leave it unset for open sign-up. The sign-up form asks for it when `GET /api/auth/registration` says it's needed. Wrong codes count against the registration rate limit, so the code can't be guessed quickly. Existing accounts are unaffected, and changing the code only affects new sign-ups.
 
 ## Rate limiting (`rate-limit.ts`)
 
@@ -57,10 +62,18 @@ If we ever run several server instances, move these counters into Postgres.
 
 The client connects on the same origin, so the browser sends the `sid` cookie with the handshake. `realtime.ts` looks up the session in middleware and rejects the connection with `unauthorized` if there is none. The user is stored in `socket.data.user`.
 
+CORS doesn't apply to Socket.IO, so `allowRequest` rejects handshakes whose `Origin` isn't this site (cross-site WebSocket hijacking). `SameSite=Lax` alone isn't enough: sibling subdomains count as the same *site* and would get the cookie.
+
 ## CSRF
 
 - `SameSite=Lax` stops other sites from sending the cookie with background `POST`s.
 - Fastify only accepts `application/json` bodies. A plain HTML form posted from another site is rejected with `415`.
+
+## Other hardening (`security.ts`, `app.ts`)
+
+- Every response carries a Content Security Policy (scripts only from this origin, no framing), `X-Frame-Options: DENY`, `nosniff`, a same-origin referrer policy and, when `COOKIE_SECURE=true`, HSTS.
+- Server errors (5xx) are logged and answered with a generic message, so database errors don't reach clients.
+- HTTP bodies and Socket.IO messages are capped at 64 KiB.
 
 ## Not implemented (on purpose, for now)
 

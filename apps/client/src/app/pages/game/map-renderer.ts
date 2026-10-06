@@ -1,9 +1,9 @@
-import { SONAR_RANGE, type OutpostView, type PlayerView, type Point, type Sub } from '@subterfuge/engine';
+import { SONAR_RANGE, outpostOfSpec, type OutpostView, type PlayerView, type Point, type Sub } from '@subterfuge/engine';
 import { toScreen, type Camera, type Viewport } from './camera';
 import { DORMANT_COLOR, UNKNOWN_COLOR, playerColor } from './colors';
 import { formatDuration, formatGameTime, plannedTripLabel } from './format';
 import { subPositionAt, travelMinutes } from './geometry';
-import { effectiveShieldMax, shieldRingFill } from './shield-rings';
+import { shieldRingFill } from './shield-rings';
 import { badgeCenter, estimatedLaunchAt, type OrderMarker } from './overlays';
 import { isSelected, type Selection } from './selection';
 
@@ -24,6 +24,8 @@ export interface Scene {
    * delay"; the time machine passes the scheduled time instead.
    */
   launchAt?: number;
+  /** Speed of the planned launch's cargo, as the launch form computes it. */
+  launchSpeed?: number;
   /**
    * Enemy launches about to happen (still cancellable by their owner),
    * drawn as warning routes.
@@ -127,11 +129,12 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
     const color = playerColor(view, sub.owner);
     // The way it came: fainter, and only inside your sonar (you can't have
     // seen it travel through waters you don't watch).
-    const origin = byId.get(sub.from);
+    // A redirected sub's leg starts where it turned.
+    const origin = sub.origin ?? byId.get(sub.from)?.position;
     if (origin && sonarClip) {
       ctx.save();
       ctx.clip(sonarClip);
-      dashedLine(ctx, screen(origin.position), screen(at), withAlpha(color, selected ? 0.5 : 0.2), selected ? 2 : 1.5, [4, 6]);
+      dashedLine(ctx, screen(origin), screen(at), withAlpha(color, selected ? 0.5 : 0.2), selected ? 2 : 1.5, [4, 6]);
       ctx.restore();
     }
     // The way ahead.
@@ -139,16 +142,22 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
     subs.push({ sub, at, target: to.position });
   }
 
-  const queens = new Set(
-    view.specialists
-      .filter((s) => s.kind === 'queen' && s.captiveOf === null && 'outpost' in s.location)
-      .map((s) => (s.location as { outpost: string }).outpost),
-  );
+  /** Free specialists standing at each outpost, queen first. */
+  const crew = new Map<string, { royal: boolean; count: number }>();
+  for (const spec of view.specialists) {
+    if (spec.captiveOf !== null) continue;
+    const at = outpostOfSpec(spec);
+    if (at === null) continue;
+    const entry = crew.get(at) ?? { royal: false, count: 0 };
+    if (spec.kind === 'queen' || spec.kind === 'princess') entry.royal = true;
+    else entry.count++;
+    crew.set(at, entry);
+  }
   const showNames = camera.scale >= 0.3;
   for (const outpost of view.outposts) {
     const selected = isSelected(scene.selection, 'outpost', outpost.id);
     drawOutpost(ctx, scene, outpost, screen(outpost.position), {
-      queen: queens.has(outpost.id),
+      crew: crew.get(outpost.id) ?? { royal: false, count: 0 },
       selected,
       showName: showNames || selected || outpost.id === hoverOutpost,
     });
@@ -165,7 +174,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: Scene): boolean 
 
   if (launchFrom && launchTo && launchTo !== launchFrom) {
     const launchAt = scene.launchAt ?? estimatedLaunchAt(scene.minute);
-    const travel = travelMinutes(launchFrom.position, launchTo.position);
+    const travel = travelMinutes(launchFrom.position, launchTo.position, scene.launchSpeed ?? 1);
     const p = screen(launchTo.position);
     tag(ctx, plannedTripLabel(travel, launchAt + travel), { x: p.x + 16, y: p.y + 22 }, ACCENT, 'left');
   }
@@ -279,7 +288,7 @@ function drawOutpost(
   scene: Scene,
   outpost: OutpostView,
   p: Point,
-  opts: { queen: boolean; showName: boolean; selected: boolean },
+  opts: { crew: { royal: boolean; count: number }; showName: boolean; selected: boolean },
 ): void {
   const { view } = scene;
   const r = OUTPOST_RADIUS;
@@ -289,7 +298,9 @@ function drawOutpost(
   // Shield: one ring per 10 charge (10 → 1 ring, 20 → 2, more with the
   // Queen), each a dim track with a bright arc, filling inner to outer.
   let outer = r + 4;
-  const max = effectiveShieldMax(scene.view, outpost);
+  // The engine sends what the shield really reaches (Queen, Security Chief,
+  // King included); `shieldMax` is the outpost's own maximum.
+  const max = outpost.shieldMaxEffective ?? outpost.shieldMax;
   if (max !== undefined && outpost.shieldCharge !== undefined) {
     const fills = shieldRingFill(outpost.shieldEnabled === false ? 0 : outpost.shieldCharge, max);
     fills.forEach((fill, i) => {
@@ -346,7 +357,16 @@ function drawOutpost(
   if (outpost.type === 'generator') bolt(ctx, p, r, BG);
   ctx.restore();
 
-  if (opts.queen) crown(ctx, { x: p.x, y: p.y - r - 12 }, color);
+  // The Queen (or a Princess) gets a crown; other specialists a dot each,
+  // so you can see who staffs an outpost without opening a panel.
+  const top = p.y - r - 12;
+  if (opts.crew.royal) crown(ctx, { x: p.x, y: top }, color);
+  // Dots are centred over the outpost, or follow the crown on its right.
+  const dots = Math.min(opts.crew.count, MAX_CREW_DOTS);
+  for (let i = 0; i < dots; i++) {
+    const x = opts.crew.royal ? p.x + 11 + i * 7 : p.x + (i - (dots - 1) / 2) * 7;
+    dot(ctx, { x, y: top }, color);
+  }
   if (outpost.drillers !== undefined) {
     ctx.font = '600 11px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -354,7 +374,7 @@ function drawOutpost(
     ctx.fillStyle = TEXT;
     ctx.fillText(String(outpost.drillers), p.x, p.y + r + 7);
   }
-  label(ctx, opts.showName ? outpost.name : '', p, r + (opts.queen ? 12 : 0));
+  label(ctx, opts.showName ? outpost.name : '', p, r + (opts.crew.royal || opts.crew.count ? 12 : 0));
 }
 
 function drawSub(
@@ -446,6 +466,19 @@ function crown(ctx: CanvasRenderingContext2D, p: Point, color: string): void {
   ctx.lineTo(p.x + w / 2, p.y - h / 2);
   ctx.lineTo(p.x + w / 2, p.y + h / 2);
   ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = BG;
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** At most this many specialist dots beside an outpost. */
+const MAX_CREW_DOTS = 5;
+
+function dot(ctx: CanvasRenderingContext2D, p: Point, color: string): void {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.strokeStyle = BG;
   ctx.lineWidth = 1;

@@ -22,7 +22,7 @@ Games survive server restarts. Everything runs with `docker compose up` (see [RE
 | CI | Pushes to `main` and PRs: typecheck, tests with a Postgres service, build, replay bench, Docker build | `.github/workflows/ci.yml` |
 | Docs | README, goal.md (rules), architecture, engine, API, auth, development, decisions, **roadmap** (what's next), this file | `docs/` |
 
-**Only the Queen exists as a specialist.** Hiring, the other 27 specialists, chat, funding and domination mode are not built. The next steps are in [roadmap.md](roadmap.md).
+**Specialists batch 1 is built** (hiring, promotion, Queen succession, 15 kinds; [specialists.md](specialists.md)). Batch 2, chat, funding and domination mode are not built; see [roadmap.md](roadmap.md).
 
 ## 2. Read these, in this order
 
@@ -64,7 +64,9 @@ Listed in [roadmap.md → Open decisions](roadmap.md#open-decisions-need-the-use
 
 **Then the main session integrates and verifies in the browser.**
 
-**Get an independent review before calling work done.** Two reviews caught real concurrency bugs in the runtime: lost orders and missed broadcasts.
+**Get an independent review before calling work done.** Two reviews caught real concurrency bugs in the runtime: lost orders and missed broadcasts. The specialists review found rules bugs that the same agent's tests had encoded as correct (redirects, Inspector, Thief, Engineer). Check tests against goal.md, not against the code, and mutation-check new ones.
+
+**Playtest in a real browser, at 240×.** Headless Chrome (`puppeteer-core` installed outside the repo, pointed at the local Chrome) found three bugs no test had: a launch form that reset on every server update, a map label at the wrong speed, and a dot drawn over the crown. Server updates every 2.5 s at 240× surface state bugs that 1× hides.
 
 **Environment gotchas:**
 - **Judge checks by exit code, not by grepping output.** `tsc` and Vitest colour their output, so `grep "error TS"` silently misses errors. This let a type error slip into three commits. Use e.g. `npm run typecheck >/dev/null 2>&1; echo $?`.
@@ -75,6 +77,8 @@ Listed in [roadmap.md → Open decisions](roadmap.md#open-decisions-need-the-use
 - **Ports:** stop the compose `app` container before `npm run dev`; both use :3000.
 - **Engine `dist/`:** the server and client import the **built** engine. Run `npm run build -w @subterfuge/engine`, or keep `npm run dev`, which watches it.
 - **Server DB tests** create throwaway `sub_test_*` databases and are skipped when Postgres is down. Run `npm run db:up` first.
+- **`linkedSignal` re-runs on any change its `source` reads**, not only when the source's value changes. Put the key in a `computed` and pass that as `source`, or the state resets on every update (see `outpost-panel.ts`).
+- **The server indexes the built client at startup:** after rebuilding the client, restart the server or the new bundle 404s.
 - Long waits: Bash blocks a bare `sleep` over a minute. Use a script that polls (e.g. a Node script listening for `gameUpdate`), or run it in the background.
 
 **Local state (dev machine only):**

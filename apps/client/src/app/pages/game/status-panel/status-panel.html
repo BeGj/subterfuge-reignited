@@ -37,6 +37,18 @@
     }
   </ul>
 
+  <h2 id="your-specialists">Your specialists</h2>
+  <ul class="specialists" aria-labelledby="your-specialists">
+    @for (s of mySpecialists(); track s.id) {
+      <li>
+        <span>{{ s.name }}</span>
+        <span class="muted">{{ s.where }}</span>
+      </li>
+    } @empty {
+      <li class="muted">Only your Queen so far — you can hire from hour 4.</li>
+    }
+  </ul>
+
   <h2 id="your-subs" class="subs-title">Your subs</h2>
   <ul class="subs" aria-labelledby="your-subs">
     @for (s of mySubs(); track s.id) {

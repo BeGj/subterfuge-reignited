@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { RULES_VERSION, type GameSnapshot, type OrderInput, type OutpostView } from '@subterfuge/engine';
+import { FIRST_HIRE_AT, HIRE_INTERVAL, RULES_VERSION, type GameSnapshot, type OrderInput, type OutpostView } from '@subterfuge/engine';
 import type { Sql } from '../db.ts';
 import { createEventBus } from '../events.ts';
 import { createTestDb, createUser, dbAvailable, type TestDb } from '../test/test-db.ts';
@@ -382,6 +382,92 @@ describe.skipIf(!dbAvailable)('GameRuntime (Postgres)', () => {
     await sql`UPDATE games SET reveal_owners = false WHERE id = ${off.gameId}`;
     const hiddenOff = (await off.restarted().snapshot(off.gameId, off.a)).view.outposts.filter((o) => !o.visible);
     expect(hiddenOff.every((o) => o.owner === undefined)).toBe(true);
+  });
+
+  it('deals an offer at 4 hours, to every player, and takes the chosen specialist', async () => {
+    const t = await setup();
+    t.setMinute(FIRST_HIRE_AT + 10);
+    const snap = await t.runtime.snapshot(t.gameId, t.a);
+    const offer = snap.view.hiring.offer!;
+    expect(offer.at).toBe(FIRST_HIRE_AT);
+    const choice = Object.values(offer.kinds)[0]!;
+    const queen = snap.view.specialists.find((s) => s.kind === 'queen' && s.owner === snap.view.you)!.location;
+    const queenAt = 'outpost' in queen ? queen.outpost : '';
+
+    // The other player has their own offer, with their own cards.
+    const other = (await t.runtime.snapshot(t.gameId, t.b)).view.hiring.offer!;
+    expect(other.at).toBe(FIRST_HIRE_AT);
+    expect(other.kinds).not.toEqual(offer.kinds);
+
+    await t.issue(t.a, { kind: 'hire', choice });
+    t.setMinute(FIRST_HIRE_AT + 20);
+    t.loop();
+
+    const hired = await t.runtime.snapshot(t.gameId, t.a);
+    const arrived = hired.view.specialists.filter((s) => s.kind === choice);
+    expect(arrived).toHaveLength(1);
+    expect(hired.view.hiring.offer).toBeNull();
+    expect(hired.events.some((e) => e.kind === 'specialistHired' && e.player === 'p1')).toBe(true);
+    // It is standing where the Queen is.
+    expect(arrived[0]!.location).toEqual({ outpost: queenAt });
+
+    // The hire survives a restart: it is an order, and the offer is state.
+    const afterRestart = await t.restarted().snapshot(t.gameId, t.a);
+    expect(afterRestart.view.specialists.filter((s) => s.kind === choice)).toHaveLength(1);
+    expect(afterRestart.view.hiring.offer).toBeNull();
+  });
+
+  it('refuses a hire nobody was offered and a second hire for one offer', async () => {
+    const t = await setup();
+    t.setMinute(60);
+    await expect(t.issue(t.a, { kind: 'hire', choice: 'princess' })).rejects.toThrow(/no offer/);
+
+    t.setMinute(FIRST_HIRE_AT + 10);
+    const snap = await t.runtime.snapshot(t.gameId, t.a);
+    const offered = Object.values(snap.view.hiring.offer!.kinds);
+    // A promoted kind is never offered.
+    await expect(t.issue(t.a, { kind: 'hire', choice: 'general' })).rejects.toThrow(/not on offer/);
+    await t.issue(t.a, { kind: 'hire', choice: offered[0]! });
+    // The offer is gone, so there is nothing left to take.
+    t.setMinute(FIRST_HIRE_AT + 20);
+    t.loop();
+    await expect(t.issue(t.a, { kind: 'hire', choice: offered[0]! })).rejects.toThrow(/no offer/);
+  });
+
+  it('promotes a specialist standing on your own outpost', async () => {
+    const t = await setup();
+    // Wait for an offer with a Lieutenant on it (half the offensive deck).
+    let minute = FIRST_HIRE_AT + 10;
+    let lieutenant = null;
+    for (let i = 0; i < 20 && !lieutenant; i++) {
+      t.setMinute(minute);
+      const snap = await t.runtime.snapshot(t.gameId, t.a);
+      if (snap.view.hiring.offer?.kinds.offensive === 'lieutenant') {
+        await t.issue(t.a, { kind: 'hire', choice: 'lieutenant' });
+        t.setMinute(minute + 10);
+        t.loop();
+        lieutenant = (await t.runtime.snapshot(t.gameId, t.a)).view.specialists.find((s) => s.kind === 'lieutenant')!;
+      } else {
+        minute += HIRE_INTERVAL + 10;
+      }
+    }
+    expect(lieutenant, 'a Lieutenant should turn up within a few offers').not.toBeNull();
+    const at = 'outpost' in lieutenant!.location ? lieutenant!.location.outpost : '';
+
+    // Promoting is taken instead of a hire, and the hire used up this offer.
+    await expect(t.issue(t.a, { kind: 'promote', specialist: lieutenant!.id })).rejects.toThrow(/no offer/);
+    const nextOfferAt = (await t.runtime.snapshot(t.gameId, t.a)).view.hiring.nextOfferAt;
+    t.setMinute(nextOfferAt + 10);
+    await t.issue(t.a, { kind: 'promote', specialist: lieutenant!.id });
+    t.setMinute(nextOfferAt + 20);
+    t.loop();
+
+    const after = await t.runtime.snapshot(t.gameId, t.a);
+    const general = after.view.specialists.find((s) => s.id === lieutenant!.id)!;
+    expect(general).toMatchObject({ kind: 'general' });
+    expect(general.location).toEqual({ outpost: at }); // promoted in place
+    expect(after.events.some((e) => e.kind === 'specialistPromoted')).toBe(true);
+    expect(after.view.hiring.offer).toBeNull(); // the promotion took the offer
   });
 
   it("keeps each player's event feed separate, so a busy player can't flush another's", async () => {

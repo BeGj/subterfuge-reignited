@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LAUNCH_DELAY } from './constants.js';
+import { FIRST_HIRE_AT, LAUNCH_DELAY, TICK } from './constants.js';
 import { UNKNOWN_PLAYER, forecast, predictArrivals, stateFromView } from './forecast.js';
 import { generateMap } from './map.js';
-import { advance } from './simulation.js';
+import { distance } from './geometry.js';
+import { advance, subPosition } from './simulation.js';
 import type { GameState, LaunchOrder, OutpostView, PlayerView } from './types.js';
 import { viewFor } from './visibility.js';
 
@@ -45,6 +46,93 @@ describe('stateFromView', () => {
     forecast(view, [], view.time + 600);
     expect(JSON.stringify(view)).toBe(before);
   });
+
+  it("carries the viewer's hiring, and nobody else's", () => {
+    const { state, view } = setup();
+    const you = state.players.find((p) => p.id === 'p1')!;
+    const forecastState = stateFromView(view);
+    expect(forecastState.players.find((p) => p.id === 'p1')!.hiring).toEqual({
+      nextOfferAt: you.hiring.nextOfferAt,
+      deck: { offensive: [], defensive: [], other: [] },
+      offer: null,
+    });
+    // A forecast never deals: the decks aren't in the view.
+    expect(forecastState.players.find((p) => p.id === 'p2')!.hiring.nextOfferAt).toBe(Number.MAX_SAFE_INTEGER);
+    expect(advance(forecastState, [], view.time + 4 * 24 * 60).state.players.find((p) => p.id === 'p2')!.hiring.offer)
+      .toBeNull();
+  });
+
+  it('lets a promotion scheduled after the next offer go through, though the decks are hidden', () => {
+    const { state } = setup();
+    const queen = state.specialists.find((s) => s.kind === 'queen' && s.owner === 'p1')!;
+    state.specialists.push({ id: 'lt', kind: 'lieutenant', owner: 'p1', location: queen.location, captiveOf: null });
+    const view = viewFor(state, 'p1');
+    const at = FIRST_HIRE_AT + TICK;
+    const { events } = forecast(view, [{ kind: 'promote', at, player: 'p1', specialist: 'lt' }], at);
+    expect(events.map((e) => e.kind)).toContain('specialistPromoted');
+    expect(events.map((e) => e.kind)).not.toContain('orderRejected');
+  });
+
+  it('keeps a redirected sub on the leg it turned onto', () => {
+    // Fully visible: p1's sub turns back towards home with p2's sub behind it.
+    const { state } = setup();
+    const home = state.outposts.find((o) => o.owner === 'p1' && o.drillers >= 40)!;
+    const near = state.outposts
+      .filter((o) => o.owner === 'p1' && o.id !== home.id)
+      .sort((a, b) => distance(a.position, home.position) - distance(b.position, home.position))[0]!;
+    const length = distance(home.position, near.position);
+    const at = (f: number) => ({
+      x: home.position.x + (near.position.x - home.position.x) * f,
+      y: home.position.y + (near.position.y - home.position.y) * f,
+    });
+    const base = { drillers: 10, specialists: [], isGift: false, speed: 1, lastRedirectAt: 0 };
+    state.subs.push(
+      // Turned at 60% of the lane at minute 0, heading home.
+      { ...base, id: 'sub-90', owner: 'p1', from: near.id, to: home.id, origin: at(0.6), launchedAt: 0, arrivesAt: Math.ceil((0.6 * length) / 10) * 10 },
+      // Following it out from home, 20% along at minute 0.
+      { ...base, id: 'sub-91', owner: 'p2', drillers: 5, from: home.id, to: near.id, launchedAt: -Math.ceil((0.2 * length) / 10) * 10, arrivesAt: Math.ceil((0.8 * length) / 10) * 10 },
+    );
+    const view = viewFor(state, 'p1', { revealOwners: true });
+    const until = Math.ceil(length / 10) * 10;
+    const real = advance(state, [], until).events.find((e) => e.kind === 'combat');
+    const predicted = forecast(view, [], until).events.find((e) => e.kind === 'combat');
+    expect(real).toBeDefined();
+    expect(predicted?.at).toBe(real!.at);
+    expect(subPosition(stateFromView(view), view.subs.find((s) => s.id === 'sub-90')!, 30)).toEqual(
+      subPosition(state, state.subs.find((s) => s.id === 'sub-90')!, 30),
+    );
+  });
+
+  it('keeps the base shield maximum, so specialist bonuses are not counted twice', () => {
+    const { state, view } = setup();
+    const queenOutpost = state.specialists.find((s) => s.kind === 'queen')!.location;
+    const id = 'outpost' in queenOutpost ? queenOutpost.outpost : '';
+    const view_ = view.outposts.find((o) => o.id === id)!;
+    // The view carries both, and the base one is what feeds a forecast state.
+    expect(view_.shieldMax).toBe(10);
+    expect(view_.shieldMaxEffective).toBe(30);
+    expect(stateFromView(view).outposts.find((o) => o.id === id)!.shieldMax).toBe(10);
+  });
+
+  it('predicts the specialist effects it can see', () => {
+    const { state, view } = setup();
+    // A Lieutenant riding a sub that will arrive at a visible outpost.
+    const from = own(view)[0]!;
+    const target = view.outposts.find((o) => o.visible && o.owner === 'p2');
+    if (!target) return;
+    const withLieutenant = structuredClone(state);
+    const at = withLieutenant.outposts.find((o) => o.id === from.id)!;
+    withLieutenant.specialists.push({
+      id: 'spec-lt',
+      kind: 'lieutenant',
+      owner: 'p1',
+      location: { outpost: at.id },
+      captiveOf: null,
+    });
+    const order = { ...launch(from, target, 5), specialists: ['spec-lt'] };
+    const predicted = predictArrivals(viewFor(withLieutenant, 'p1'), [order])[0];
+    expect(predicted?.combat?.details.effects).toEqual(['Lieutenant destroyed 5 drillers']);
+  });
 });
 
 describe('predictArrivals', () => {
@@ -73,6 +161,25 @@ describe('predictArrivals', () => {
     if (!hidden) return;
     const from = own(view)[0]!;
     expect(predictArrivals(view, [launch(from, hidden, 10)])[0]?.outcome).toBe('unknown');
+  });
+
+  it('predicts the faster arrival of a Helmsman', () => {
+    const { state, view } = setup();
+    const from = own(view)[0]!;
+    const target = view.outposts.find((o) => o.visible && o.owner === null)!;
+    const withHelmsman = structuredClone(state);
+    withHelmsman.specialists.push({
+      id: 'spec-h',
+      kind: 'helmsman',
+      owner: 'p1',
+      location: { outpost: from.id },
+      captiveOf: null,
+    });
+    const order = { ...launch(from, target, 5), specialists: ['spec-h'] };
+    const fast = predictArrivals(viewFor(withHelmsman, 'p1'), [order])[0]!;
+    const slow = predictArrivals(view, [launch(from, target, 5)])[0]!;
+    expect(fast.arrivesAt).toBeLessThan(slow.arrivesAt);
+    expect(fast.arrivesAt - LAUNCH_DELAY).toBe(Math.ceil((slow.arrivesAt - LAUNCH_DELAY) / 2 / 10) * 10);
   });
 
   it('skips launches that would be rejected', () => {

@@ -5,6 +5,7 @@ import type { ClientToServerEvents, PublicUser, ServerToClientEvents } from '@su
 import type { Sql } from './db.ts';
 import type { EventBus } from './events.ts';
 import { SESSION_COOKIE, findSessionUser } from './auth/sessions.ts';
+import { isSameOrigin } from './security.ts';
 
 interface SocketData {
   user: PublicUser;
@@ -23,7 +24,12 @@ export function createRealtime(
   events: EventBus,
   clientBuild: string | null = null,
 ): RealtimeServer {
-  const io: RealtimeServer = new Server(httpServer, { serveClient: false });
+  const io: RealtimeServer = new Server(httpServer, {
+    serveClient: false,
+    // Game messages are small; the 1 MB default only helps abusers.
+    maxHttpBufferSize: 64 * 1024,
+    allowRequest: (req, callback) => callback(null, isSameOrigin(req)),
+  });
 
   io.use(async (socket, next) => {
     const cookies = fastifyCookie.parse(socket.request.headers.cookie ?? '');

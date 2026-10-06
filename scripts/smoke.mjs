@@ -176,15 +176,18 @@ async function main() {
 
   // Launch a sub at the nearest visible *dormant* outpost and wait for it to
   // be captured. Any other target is a coin flip: an enemy outpost holds 40
-  // drillers, and our own outpost wouldn't test a capture at all.
-  const dist = (o) => Math.hypot(o.position.x - mine1[0].position.x, o.position.y - mine1[0].position.y);
-  const target = snap.view.outposts
-    .filter((o) => o.visible && o.owner === null)
-    .sort((x, y) => dist(x) - dist(y))[0];
-  if (!target) throw new Error('no visible dormant outpost to capture');
+  // drillers, and our own outpost wouldn't test a capture at all. Pick the
+  // closest pair over all our outposts, not just the first: the wait is real
+  // time, and on some maps the first outpost's nearest target is over five
+  // real minutes away even at blitz speed.
+  const dist = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+  const dormant = snap.view.outposts.filter((o) => o.visible && o.owner === null);
+  const pairs = mine1.flatMap((origin) => dormant.map((target) => ({ origin, target, d: dist(origin, target) })));
+  if (pairs.length === 0) throw new Error('no visible dormant outpost to capture');
+  const { origin, target } = pairs.sort((x, y) => x.d - y.d)[0];
   const pending = await order(aliceSocket, {
     gameId: game.id,
-    order: { kind: 'launch', from: mine1[0].id, to: target.id, drillers: 20, specialists: [] },
+    order: { kind: 'launch', from: origin.id, to: target.id, drillers: 20, specialists: [] },
   });
   step('launch order accepted', Boolean(pending.id), `order ${pending.id}`);
 
@@ -193,7 +196,7 @@ async function main() {
     (s) => s.events.some((e) => e.kind === 'subLaunched'),
     'subLaunched',
   );
-  const from = launched.view.outposts.find((o) => o.id === mine1[0].id);
+  const from = launched.view.outposts.find((o) => o.id === origin.id);
   step(
     'sub launched from the origin outpost',
     from.drillers === 20,
@@ -211,6 +214,33 @@ async function main() {
     destination.owner === you && destination.drillers >= 20,
     `${destination.name}: owner ${destination.owner}, ${destination.drillers} drillers`,
   );
+
+  // Hiring: the Queen gets her first offer 4 game hours in (1 real minute at
+  // blitz), and only Alice may see it.
+  const offered = await until(aliceSocket, (s) => s.view.hiring.offer !== null, 'a hire offer');
+  const cards = Object.entries(offered.view.hiring.offer.kinds);
+  step('first specialist offer arrives at hour 4', cards.length >= 2, `${cards.length} cards: ${cards.map(([, k]) => k).join(', ')}`);
+
+  const bobOffer = await watch(bobSocket, game.id);
+  const bobOwnOffer = bobOffer.view.hiring.offer !== null;
+  const bobSeesAlices = bobOffer.view.hiring.offer?.kinds === offered.view.hiring.offer?.kinds;
+  step("nobody else's offer is visible", !(bobOwnOffer && bobSeesAlices), 'offer is private');
+
+  const choice = cards[0][1];
+  await order(aliceSocket, { gameId: game.id, order: { kind: 'hire', choice } });
+  const hired = await until(
+    aliceSocket,
+    (s) => s.view.specialists.some((x) => x.kind === choice && x.owner === s.view.you),
+    'the hired specialist',
+  );
+  const queen = hired.view.specialists.find((x) => x.kind === 'queen' && x.owner === hired.view.you);
+  const newSpec = hired.view.specialists.find((x) => x.kind === choice && x.owner === hired.view.you);
+  step(
+    'hired specialist appears at the Queen\'s outpost',
+    newSpec && queen && newSpec.location.outpost === queen.location.outpost,
+    `${choice} at ${newSpec?.location.outpost} (Queen at ${queen?.location.outpost})`,
+  );
+  step('offer is cleared once taken', hired.view.hiring.offer === null, 'no pending offer');
 
   // Alice's own launch must never reach Bob's event feed.
   const bobSnap = await watch(bobSocket, game.id);

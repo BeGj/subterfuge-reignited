@@ -33,6 +33,14 @@ const HEADINGS = { win: 'Predicted win', lose: 'Predicted loss', unknown: 'Outco
           <dt>Shield</dt>
           <dd>{{ s }}</dd>
         }
+        @if (effects().length) {
+          <dt>Specialists</dt>
+          <dd>
+            @for (effect of effects(); track $index) {
+              <div>{{ effect }}</div>
+            }
+          </dd>
+        }
       </dl>
       <div class="actions">
         <button type="button" (click)="tm.travelTo(prediction().at)">Jump to arrival</button>
@@ -65,13 +73,17 @@ export class BattlePanel {
   protected readonly summary = computed(() => outcomeSummary(this.prediction(), this.view().you));
   protected readonly where = computed(() => {
     const p = this.prediction();
-    const route = `${this.names().outpost(p.from)} → ${this.names().outpost(p.to)}`;
+    const route = p.origin
+      ? `redirected → ${this.names().outpost(p.to)}`
+      : `${this.names().outpost(p.from)} → ${this.names().outpost(p.to)}`;
     return p.combat && !p.combat.outpost ? `Between subs, on ${route}` : `${this.names().outpost(p.to)} (${route})`;
   });
   protected readonly when = computed(() => {
     const at = this.prediction().at;
     return `${formatGameTime(at)} · in ${formatDuration(Math.max(0, at - this.minute()))}`;
   });
+  /** What the specialists did before the drillers fought ("Thief stole 6 drillers"). */
+  protected readonly effects = computed(() => this.prediction().combat?.details.effects ?? []);
   protected readonly sides = computed(() =>
     (this.prediction().combat?.details.sides ?? []).map((s) => ({
       ...s,

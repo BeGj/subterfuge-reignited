@@ -234,11 +234,11 @@ This is a summary. For details see [docs/architecture.md](docs/architecture.md),
 
 ### Open questions for our clone
 Still open:
-- Which specialists to include in v1? Suggestion: Queen, Princess, Helmsman, Lieutenant/General, Inspector/Security Chief, Foreman, Thief, Navigator, Intelligence Officer. Add the complex ones (Martyr, Double Agent, Pirate, Hypnotist, Revered Elder) later.
 - Domination mode: include in v1, and what outpost target per player count?
 
 Answered (details in `docs/`):
 - **Shield ratio:** 1/3 of outposts have max 20, the rest max 10 (decided by the user; the developer quote of 2/3 is not used).
+- **Specialists in v1:** batch 1 is Queen, Princess, Helmsman, Lieutenant→General, Thief, Navigator→Admiral, Foreman→Engineer, Inspector→Security Chief, Intelligence Officer, and Hypnotist→King (the King's only base). The complex ones (Assassin, Infiltrator, Saboteur, Double Agent, Revered Elder, Martyr, Pirate, Smuggler, Sentry, Diplomat, Tinkerer, Tycoon) come later, each as its own rules bump. Unpicked hire cards are lost, one offer at a time, hiring needs the Queen at one of your outposts, promoting uses up the offer, Queens still can't be gifted, and Tycoon's "+50 % rate" is +50 % drillers per cycle. See `docs/specialists.md`.
 - **Time scale:** both. Per-game speed presets: real time, 60× and 240× (`GAME_SPEEDS`).
 - **Shield after capture:** an attacker only wins once the shield is drained, so a captured outpost starts at 0 charge and recharges from there.
 - **Distance scale:** map units with `SUB_SPEED` = 1 unit per game minute. Every map is 4000 units square, so neighbouring outposts are about 6.3 travel-hours apart at 10 players and 9.5 h at 2. Sonar is 1620 units (27 h). See `docs/engine.md` and `npm run map:stats -w @subterfuge/engine`.

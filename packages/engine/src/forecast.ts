@@ -1,7 +1,8 @@
-import { NEPTUNIUM_UNIT, SUB_SPEED, TICK } from './constants.js';
+import { NEPTUNIUM_UNIT, TICK } from './constants.js';
 import { distance } from './geometry.js';
+import { inertHiring } from './hiring.js';
 import { progressForCharge } from './shield.js';
-import { advance } from './simulation.js';
+import { advance, travelTime } from './simulation.js';
 import type {
   CombatDetails,
   GameEvent,
@@ -11,6 +12,9 @@ import type {
   OutpostId,
   PlayerId,
   PlayerView,
+  Point,
+  SpecialistCategory,
+  SpecialistKind,
   SubId,
 } from './types.js';
 
@@ -30,6 +34,11 @@ export const UNKNOWN_PLAYER: PlayerId = '?';
 
 /** Id counter for forecast-only subs, far above anything a real game reaches. */
 const FORECAST_ID_BASE = 1_000_000_000;
+
+/** No deck cards: the forecast draws no offers (see `stateFromView`). */
+function emptyDecks(): Record<SpecialistCategory, SpecialistKind[]> {
+  return { offensive: [], defensive: [], other: [] };
+}
 
 /**
  * Builds a simulatable state from a player's view. Approximations: shield
@@ -62,10 +71,23 @@ export function stateFromView(view: PlayerView): GameState {
     neptunium: p.neptunium,
     minesDrilled: p.minesDrilled,
     eliminated: p.eliminated,
+    // Only `you`'s hiring is in the view, and without their decks: a
+    // forecast must never invent a hire for anyone.
+    hiring:
+      p.id === view.you
+        ? { nextOfferAt: view.hiring?.nextOfferAt ?? Number.MAX_SAFE_INTEGER, deck: emptyDecks(), offer: view.hiring?.offer ? structuredClone(view.hiring.offer) : null }
+        : inertHiring(),
   }));
   // Marked eliminated so the placeholder never mines, wins or blocks a win;
   // its outposts still defend themselves in combat.
-  players.push({ id: UNKNOWN_PLAYER, name: 'Unknown', neptunium: 0, minesDrilled: 0, eliminated: true });
+  players.push({
+    id: UNKNOWN_PLAYER,
+    name: 'Unknown',
+    neptunium: 0,
+    minesDrilled: 0,
+    eliminated: true,
+    hiring: inertHiring(),
+  });
 
   return {
     time: view.time,
@@ -108,8 +130,10 @@ export interface ArrivalPrediction {
   to: OutpostId;
   /** Game minute of the fight (or the arrival, if there's no fight). */
   at: GameTime;
-  /** When the sub leaves (or left) its origin. */
+  /** When the sub leaves (or left) its origin, or turned (see `origin`). */
   departsAt: GameTime;
+  /** Where a redirected sub turned at `departsAt`; absent: the `from` outpost. */
+  origin?: Point;
   /** When it would reach its target, fight or not. */
   arrivesAt: GameTime;
   outcome: PredictedOutcome;
@@ -125,8 +149,20 @@ export interface ArrivalPrediction {
 export function predictArrivals(view: PlayerView, orders: readonly Order[]): ArrivalPrediction[] {
   const state = stateFromView(view);
   const position = new Map(state.outposts.map((o) => [o.id, o.position]));
-  const travel = (from: OutpostId, to: OutpostId) =>
-    Math.max(TICK, Math.ceil(distance(position.get(from)!, position.get(to)!) / SUB_SPEED / TICK) * TICK);
+  /** Travel time of a pending launch, including its cargo's speed. */
+  const travelFor = (order: Extract<Order, { kind: 'launch' }>) =>
+    travelTime(state, order.from, order.to, {
+      owner: order.player,
+      cargo: state.specialists.filter(
+        (s) =>
+          order.specialists.includes(s.id) &&
+          s.captiveOf === null &&
+          'outpost' in s.location &&
+          s.location.outpost === order.from,
+      ),
+    });
+  const knows = (o: Order) =>
+    o.kind === 'launch' && position.has(o.from) && position.has(o.to);
 
   const launches = orders
     .map((order, index) => ({ order, index }))
@@ -134,7 +170,7 @@ export function predictArrivals(view: PlayerView, orders: readonly Order[]): Arr
   let horizon = view.time;
   for (const s of view.subs) horizon = Math.max(horizon, s.arrivesAt);
   for (const { order } of launches) {
-    if (position.has(order.from) && position.has(order.to)) horizon = Math.max(horizon, order.at + travel(order.from, order.to));
+    if (knows(order)) horizon = Math.max(horizon, order.at + travelFor(order));
   }
   const { events } = advance(state, orders, horizon);
 
@@ -177,13 +213,14 @@ export function predictArrivals(view: PlayerView, orders: readonly Order[]): Arr
   const out: ArrivalPrediction[] = view.subs.map((s) => ({
     sub: s.id,
     ...predict(s.id, s.owner, s.from, s.to, s.launchedAt, s.arrivesAt),
+    ...(s.origin ? { origin: { ...s.origin } } : {}),
   }));
   for (const { order, index } of launches) {
     const subId = subForOrder.get(index);
     if (!subId) continue; // the launch would be rejected (e.g. not enough drillers)
     out.push({
       order: index,
-      ...predict(subId, order.player, order.from, order.to, order.at, order.at + travel(order.from, order.to)),
+      ...predict(subId, order.player, order.from, order.to, order.at, order.at + travelFor(order)),
     });
   }
   return out;

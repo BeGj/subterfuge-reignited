@@ -36,7 +36,8 @@ export function battleIcons(view: PlayerView, predictions: readonly Prediction[]
       if (seen.has(id)) continue;
       seen.add(id);
     }
-    const from = pos.get(p.from);
+    // A redirected sub's leg starts where it turned.
+    const from = p.origin ?? pos.get(p.from);
     const to = pos.get(p.to);
     if (!from || !to) continue;
     let at: Point = to;

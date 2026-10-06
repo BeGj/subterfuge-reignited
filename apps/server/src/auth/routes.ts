@@ -1,12 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  INVITE_CODE_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   type AuthCredentials,
   type PublicUser,
+  type RegisterRequest,
+  type RegistrationInfo,
 } from '@subterfuge/engine';
 import type { Sql } from '../db.ts';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.ts';
+import { inviteCodeMatches } from '../security.ts';
 import { RateLimiter } from './rate-limit.ts';
 import { SESSION_COOKIE, createSession, deleteSession, findSessionUser } from './sessions.ts';
 
@@ -27,6 +31,16 @@ const credentialsSchema = {
   },
 } as const;
 
+const registerSchema = {
+  body: {
+    ...credentialsSchema.body,
+    properties: {
+      ...credentialsSchema.body.properties,
+      inviteCode: { type: 'string', maxLength: INVITE_CODE_MAX_LENGTH },
+    },
+  },
+} as const;
+
 declare module 'fastify' {
   interface FastifyRequest {
     /** Set by `requireUser`. */
@@ -37,9 +51,14 @@ declare module 'fastify' {
 export interface AuthOptions {
   sql: Sql;
   cookieSecure: boolean;
+  /** When set, registering requires this invite code. */
+  registrationCode: string | null;
 }
 
-export async function authRoutes(app: FastifyInstance, { sql, cookieSecure }: AuthOptions): Promise<void> {
+export async function authRoutes(
+  app: FastifyInstance,
+  { sql, cookieSecure, registrationCode }: AuthOptions,
+): Promise<void> {
   const loginPerAccount = new RateLimiter(10, FIFTEEN_MINUTES);
   const loginPerIp = new RateLimiter(50, FIFTEEN_MINUTES);
   const registerPerIp = new RateLimiter(10, HOUR);
@@ -59,11 +78,19 @@ export async function authRoutes(app: FastifyInstance, { sql, cookieSecure }: Au
     return user;
   };
 
-  app.post<{ Body: AuthCredentials }>('/api/auth/register', { schema: credentialsSchema }, async (req, reply) => {
+  app.get('/api/auth/registration', async (): Promise<RegistrationInfo> => ({
+    inviteRequired: registrationCode !== null,
+  }));
+
+  app.post<{ Body: RegisterRequest }>('/api/auth/register', { schema: registerSchema }, async (req, reply) => {
+    // Counts wrong invite codes too, so the code can't be guessed quickly.
     if (!registerPerIp.attempt(req.ip)) {
       return reply.code(429).send({ error: 'Too many sign-ups. Try again later.' });
     }
-    const { username, password } = req.body;
+    const { username, password, inviteCode } = req.body;
+    if (registrationCode !== null && !inviteCodeMatches(inviteCode, registrationCode)) {
+      return reply.code(403).send({ error: 'Wrong invite code.' });
+    }
     try {
       const [user] = await sql<PublicUser[]>`
         INSERT INTO users (username, password_hash)
