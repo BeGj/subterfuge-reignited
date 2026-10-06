@@ -30,10 +30,10 @@ jobs:
     env:
       DATABASE_URL: postgres://subterfuge:subterfuge@localhost:5432/subterfuge
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '24' # Active LTS; matches the Dockerfile and package.json engines
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -65,5 +65,5 @@ jobs:
     # server's TypeScript directly. That only breaks here, never in `npm test`.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t subterfuge-reignited:test .

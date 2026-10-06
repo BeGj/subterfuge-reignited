@@ -176,15 +176,18 @@ async function main() {
 
   // Launch a sub at the nearest visible *dormant* outpost and wait for it to
   // be captured. Any other target is a coin flip: an enemy outpost holds 40
-  // drillers, and our own outpost wouldn't test a capture at all.
-  const dist = (o) => Math.hypot(o.position.x - mine1[0].position.x, o.position.y - mine1[0].position.y);
-  const target = snap.view.outposts
-    .filter((o) => o.visible && o.owner === null)
-    .sort((x, y) => dist(x) - dist(y))[0];
-  if (!target) throw new Error('no visible dormant outpost to capture');
+  // drillers, and our own outpost wouldn't test a capture at all. Pick the
+  // closest pair over all our outposts, not just the first: the wait is real
+  // time, and on some maps the first outpost's nearest target is over five
+  // real minutes away even at blitz speed.
+  const dist = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+  const dormant = snap.view.outposts.filter((o) => o.visible && o.owner === null);
+  const pairs = mine1.flatMap((origin) => dormant.map((target) => ({ origin, target, d: dist(origin, target) })));
+  if (pairs.length === 0) throw new Error('no visible dormant outpost to capture');
+  const { origin, target } = pairs.sort((x, y) => x.d - y.d)[0];
   const pending = await order(aliceSocket, {
     gameId: game.id,
-    order: { kind: 'launch', from: mine1[0].id, to: target.id, drillers: 20, specialists: [] },
+    order: { kind: 'launch', from: origin.id, to: target.id, drillers: 20, specialists: [] },
   });
   step('launch order accepted', Boolean(pending.id), `order ${pending.id}`);
 
@@ -193,7 +196,7 @@ async function main() {
     (s) => s.events.some((e) => e.kind === 'subLaunched'),
     'subLaunched',
   );
-  const from = launched.view.outposts.find((o) => o.id === mine1[0].id);
+  const from = launched.view.outposts.find((o) => o.id === origin.id);
   step(
     'sub launched from the origin outpost',
     from.drillers === 20,
