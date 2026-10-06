@@ -32,6 +32,22 @@
       }
     </p>
 
+    @if (askInvite()) {
+      <label for="invite-code">Invite code</label>
+      <input
+        id="invite-code"
+        autocomplete="off"
+        [formField]="loginForm.inviteCode"
+        [attr.aria-invalid]="loginForm.inviteCode().touched() && loginForm.inviteCode().invalid()"
+        aria-describedby="invite-code-error"
+      />
+      <p id="invite-code-error" class="field-error">
+        @if (loginForm.inviteCode().touched()) {
+          {{ loginForm.inviteCode().errors()[0]?.message }}
+        }
+      </p>
+    }
+
     <p class="server-error" role="alert">{{ serverError() }}</p>
 
     <button type="submit" class="primary" [disabled]="submitting()">

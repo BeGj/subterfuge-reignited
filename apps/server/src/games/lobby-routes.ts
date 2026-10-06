@@ -62,7 +62,7 @@ export async function lobbyRoutes(app: FastifyInstance, { sql, events }: LobbyOp
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof LobbyError) return reply.code(err.status).send({ error: err.message });
-    return reply.send(err);
+    throw err; // the root handler hides details of unexpected errors
   });
 
   const userId = (req: { user: { id: string } | null }) => req.user!.id;

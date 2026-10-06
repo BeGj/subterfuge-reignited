@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Service, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import type { ApiError, AuthCredentials, PublicUser } from '@subterfuge/engine';
+import type { ApiError, AuthCredentials, PublicUser, RegisterRequest, RegistrationInfo } from '@subterfuge/engine';
 
 /**
  * Session state for the current browser. The session itself lives in an
@@ -31,8 +31,13 @@ export class Auth {
     return this.authenticate('/api/auth/login', credentials);
   }
 
-  register(credentials: AuthCredentials): Promise<void> {
-    return this.authenticate('/api/auth/register', credentials);
+  register(request: RegisterRequest): Promise<void> {
+    return this.authenticate('/api/auth/register', request);
+  }
+
+  /** Whether sign-up needs an invite code on this server. */
+  registrationInfo(): Promise<RegistrationInfo> {
+    return firstValueFrom(this.http.get<RegistrationInfo>('/api/auth/registration'));
   }
 
   async logout(): Promise<void> {
@@ -40,7 +45,7 @@ export class Auth {
     this.currentUser.set(undefined);
   }
 
-  private async authenticate(url: string, credentials: AuthCredentials): Promise<void> {
+  private async authenticate(url: string, credentials: AuthCredentials | RegisterRequest): Promise<void> {
     const user = await firstValueFrom(this.http.post<PublicUser>(url, credentials));
     this.currentUser.set(user);
   }

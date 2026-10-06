@@ -10,7 +10,9 @@ services:
       POSTGRES_PASSWORD: subterfuge # local default only; override in production
       POSTGRES_DB: subterfuge
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Localhost only: the app reaches it over the compose network, and the
+      # password above is a well-known default.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
@@ -25,8 +27,9 @@ services:
       DATABASE_URL: postgres://subterfuge:subterfuge@db:5432/subterfuge
       HOST: 0.0.0.0
       PORT: 3000
-      COOKIE_SECURE: "false" # set "true" when served over HTTPS
-      TRUST_PROXY: "false" # set when behind your own reverse proxy (see docs/auth.md)
+      COOKIE_SECURE: ${COOKIE_SECURE:-false} # set "true" when served over HTTPS
+      TRUST_PROXY: ${TRUST_PROXY:-false} # set when behind your own reverse proxy (see docs/auth.md)
+      REGISTRATION_CODE: ${REGISTRATION_CODE:-} # set to require an invite code to sign up
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:

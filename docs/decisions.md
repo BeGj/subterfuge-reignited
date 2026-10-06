@@ -4,6 +4,10 @@ Short records of technical decisions: what we chose, and why. Newest first. Add 
 
 ---
 
+### 2026-10-06 — Security hardening for public hosting
+**Decision:** a shared invite code (`REGISTRATION_CODE`) instead of per-person invites; a CSP that allows inline *styles* but not inline scripts; critical-CSS inlining turned off in `angular.json`; Postgres published on 127.0.0.1 only.
+**Why:** the game can now be put on the internet (see [deployment.md](deployment.md)), while `docker compose up` with no settings must keep working on a plain machine; everything new is either always on and setup-free, or off by default. A single code is enough to keep strangers out of a friends' server without building an invite system. Angular injects component styles at runtime, so `style-src 'unsafe-inline'` is needed, but its critical-CSS step adds an inline `<script>`, and dropping that costs little. The database password is a public default, so the port must not be reachable from the network.
+
 ### 2026-10-05 — Promotion uses up the hire offer
 **Decision:** `promote` needs a current offer and clears it, exactly like `hire`. It does **not** need the Queen at an outpost; only the promoted specialist must stand on one of your outposts.
 **Why:** goal.md → Hiring says you may promote "instead of hiring". The first implementation made promotion free and unlimited, which made every promotable hire a strict upgrade at no cost. goal.md only constrains where the promoted specialist is, so we don't add a Queen condition.

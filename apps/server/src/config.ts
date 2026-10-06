@@ -15,6 +15,8 @@ export interface Config {
    * their IP. `true` (trust any proxy) or a comma-separated list of proxy IPs.
    */
   trustProxy: boolean | string;
+  /** When set, registering requires this invite code. Unset means open sign-up. */
+  registrationCode: string | null;
 }
 
 function parseTrustProxy(value: string | undefined): boolean | string {
@@ -31,5 +33,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     clientDist:
       env['CLIENT_DIST'] ?? fileURLToPath(new URL('../../client/dist/client/browser', import.meta.url)),
     trustProxy: parseTrustProxy(env['TRUST_PROXY']),
+    registrationCode: env['REGISTRATION_CODE'] || null,
   };
 }

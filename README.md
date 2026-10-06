@@ -21,6 +21,8 @@ No external services or accounts are needed. Everything (Postgres, the server, t
 
 To stop it, run `docker compose down`. Add `-v` to also delete the database.
 
+Optional settings (invite code, HTTPS behind a reverse proxy) are in [docs/deployment.md](docs/deployment.md).
+
 ## Development
 
 You need Node 24+ and Docker (for Postgres).
@@ -74,4 +76,5 @@ goal.md            The game rules we're implementing, with sources
 - [ ] Specialists batch 2 (Assassin, Saboteur, Martyr, Pirate and the rest)
 - [x] Time machine: scrub into a forecast, play it, schedule orders at that time, win/lose battle predictions, jump to arrival
 - [x] Map UX from playtest: one sonar area, selectable subs with ETA, pending orders on the map (edit/cancel), ambient background
+- [x] Hardening for public hosting: security headers, Socket.IO origin check, optional invite code (see docs/deployment.md)
 - [ ] Chat
