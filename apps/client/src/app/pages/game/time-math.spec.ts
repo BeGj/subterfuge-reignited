@@ -142,6 +142,7 @@ const view: PlayerView = {
   ],
   subs: [],
   specialists: [],
+  hiring: { nextOfferAt: Number.MAX_SAFE_INTEGER, offer: null },
   winner: null,
   endedAt: null,
   endVotes: [],
@@ -178,5 +179,20 @@ describe('battleIcons', () => {
     expect(icon!.at.y).toBe(0);
     expect(icon!.at.x).toBeGreaterThan(0);
     expect(icon!.at.x).toBeLessThan(600);
+  });
+
+  it('starts a redirected sub\'s fight from where it turned', () => {
+    // Turned at x = 400 at minute 0, heading back to a (x = 0) by 400; the
+    // fight at 200 is halfway along that leg, at x = 200.
+    const p = prediction({
+      from: 'b',
+      to: 'a',
+      origin: { x: 400, y: 0 },
+      departsAt: 0,
+      arrivesAt: 400,
+      at: 200,
+      combat: { ...fight().combat!, at: 200, outpost: undefined },
+    });
+    expect(battleIcons(view, [p])[0]!.at).toEqual({ x: 200, y: 0 });
   });
 });

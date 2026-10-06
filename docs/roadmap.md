@@ -4,41 +4,19 @@ This is the one list of what's next, in order. Update it when an item is done or
 
 ## Now
 
-Nothing queued. Next up is specialists.
+**Specialists batch 1 is built, reviewed and playtested headless** (`RULES_VERSION` 3; deploying ends running v2 games).
+A human playtest is still worth doing before deploying. Known small gaps:
+- Specialists show on the map as a crown (Queen/Princess) and one dot each, not per-kind glyphs.
+- Open question for the user: should a Queen captured in combat be held as a prisoner (goal.md: she becomes your Princess "by gift or Hypnotist") rather than becoming the captor's Princess at once? See specialists.md §9.
 
-## Next: specialists (the main missing game feature)
+## Next: specialists batch 2
 
-Only the Queen exists today. Specialists are where most of Subterfuge's strategy comes from.
-
-- **Rules:** goal.md → Specialists.
-  - The Queen hires the first specialist at game hour 4, then one every 18 hours.
-  - Each offer has 3 choices, one per category, drawn from decks holding 3 copies of each specialist.
-  - Promotion is an alternative to hiring.
-  - The full effect table is in goal.md.
-- **Suggested first batch** (simple, visible effects; needs the user's OK, see open decisions):
-  - **Navigator:** redirect a sub after launch. The disabled "Redirect" button already exists.
-  - **Helmsman:** 2× speed.
-  - **Lieutenant → General:** destroy enemy drillers in combat.
-  - **Inspector → Security Chief:** shields.
-  - **Princess:** takes over if the Queen is lost. This also unblocks gifting Queens.
-  - **Foreman:** extra factory output.
-  - **Thief:** steals drillers.
-  - **Intelligence Officer:** sonar +25%, and outpost types visible everywhere.
-- **Later batch:** Martyr, Double Agent, Pirate, Hypnotist, Revered Elder, Saboteur, Sentry, Smuggler, Assassin, Diplomat, Tinkerer, and the remaining promotions.
-- **Engine:**
-  - New `SpecialistKind`s.
-  - `hire` and `promote` orders.
-  - Offers that are deterministic from the seed and stored in the state.
-  - Combat's specialist phase with priorities. `combat.ts` currently only uses specialist counts as a tie-break.
-  - Speed modifiers in `travelTime` and `subPosition`. House rule when several apply: the fastest wins.
-  - **Bump `RULES_VERSION`.**
-- **Visibility:** hire offers are visible only to their owner. Specialists are already shown at visible locations.
-- **Client:**
-  - a hire and promote panel
-  - specialist icons on the map and in panels
-  - specialist checkboxes in the launch form (they already exist for the Queen)
-  - forecasts and battle predictions that include specialist effects
-- **How:** contracts first (types and stubs), then parallel agents per specialist group with their own tests. See handoff.md §6.
+- **Rules:** goal.md → Specialists. **Design and mechanisms:** [specialists.md](specialists.md), [engine.md → Specialists](engine.md#specialists).
+- Assassin, Infiltrator, Saboteur, Double Agent, Revered Elder, Martyr, Pirate, Smuggler, Sentry, Diplomat,
+  Tinkerer→Minister of Energy, Tycoon, War Hero. Each batch is its own `RULES_VERSION` bump.
+- Most are table entries in `specialists.ts` plus a tier in `runSpecialistPhase`. The bigger ones: Martyr (outposts
+  as wrecks), Pirate (subs as targets), Sentry (a periodic firing step), Tycoon/Tinkerer/Minister (production and
+  electrical queries, see specialists.md §3.6).
 
 ## Later
 
@@ -66,11 +44,13 @@ Only the Queen exists today. Specialists are where most of Subterfuge's strategy
 
 ## Open decisions (need the user)
 
-- **First specialist batch:** is the list above right?
 - **Domination mode:** build it? If so, what outpost target per player count?
+
+Specialists were decided on 2026-10-04 and are no longer open; see [specialists.md](specialists.md).
 
 ## Done (most recent first)
 
+- **Specialists batch 1** (rules v3): hiring (offers at hour 4 then every 18 h, private per-player decks), promotion (instead of a hire), Queen succession by Princess, and Princess, Helmsman, Lieutenant→General, Thief, Navigator→Admiral (redirect), Foreman→Engineer, Inspector→Security Chief, Intelligence Officer, Hypnotist→King. Hire panel, redirect on the map, names and speeds in the panels, effective shield max in the view.
 - **Shield rings:** one ring per 10 shield (10 → 1 ring, 20 → 2, more with the Queen's +20), filling from the inside out. The shield ratio is decided: 1/3 of outposts have 20, the rest 10.
 - **End a game by agreement:** a `voteEnd` order (propose or withdraw). The game ends with no winner once everyone still playing agrees; the lobby shows "Ended by agreement" (migration 005). Additive, so no rules version bump.
 - **Lobby clean-up:** "Open games" lists only joinable (not full) games. The smoke test ends its own game, and its fog check runs with owners hidden.

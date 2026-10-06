@@ -212,6 +212,33 @@ async function main() {
     `${destination.name}: owner ${destination.owner}, ${destination.drillers} drillers`,
   );
 
+  // Hiring: the Queen gets her first offer 4 game hours in (1 real minute at
+  // blitz), and only Alice may see it.
+  const offered = await until(aliceSocket, (s) => s.view.hiring.offer !== null, 'a hire offer');
+  const cards = Object.entries(offered.view.hiring.offer.kinds);
+  step('first specialist offer arrives at hour 4', cards.length >= 2, `${cards.length} cards: ${cards.map(([, k]) => k).join(', ')}`);
+
+  const bobOffer = await watch(bobSocket, game.id);
+  const bobOwnOffer = bobOffer.view.hiring.offer !== null;
+  const bobSeesAlices = bobOffer.view.hiring.offer?.kinds === offered.view.hiring.offer?.kinds;
+  step("nobody else's offer is visible", !(bobOwnOffer && bobSeesAlices), 'offer is private');
+
+  const choice = cards[0][1];
+  await order(aliceSocket, { gameId: game.id, order: { kind: 'hire', choice } });
+  const hired = await until(
+    aliceSocket,
+    (s) => s.view.specialists.some((x) => x.kind === choice && x.owner === s.view.you),
+    'the hired specialist',
+  );
+  const queen = hired.view.specialists.find((x) => x.kind === 'queen' && x.owner === hired.view.you);
+  const newSpec = hired.view.specialists.find((x) => x.kind === choice && x.owner === hired.view.you);
+  step(
+    'hired specialist appears at the Queen\'s outpost',
+    newSpec && queen && newSpec.location.outpost === queen.location.outpost,
+    `${choice} at ${newSpec?.location.outpost} (Queen at ${queen?.location.outpost})`,
+  );
+  step('offer is cleared once taken', hired.view.hiring.offer === null, 'no pending offer');
+
   // Alice's own launch must never reach Bob's event feed.
   const bobSnap = await watch(bobSocket, game.id);
   const bobSeesLaunch = bobSnap.events.some((e) => e.kind === 'subLaunched' && e.owner === you);

@@ -52,13 +52,53 @@ export interface Sub {
   to: OutpostId;
   drillers: number;
   specialists: SpecialistId[];
+  /** When the current leg started: the launch, or the last redirect. */
   launchedAt: GameTime;
   /** Always a multiple of `TICK`. */
   arrivesAt: GameTime;
   isGift: boolean;
+  /** Speed multiplier frozen at launch, so the ETA never moves under us. */
+  speed: number;
+  /** When a Navigator last redirected this sub; `null` until it does. */
+  lastRedirectAt: GameTime | null;
+  /**
+   * Where the current leg started, for a redirected sub: it turned here at
+   * `launchedAt`. Absent: the leg starts at the `from` outpost.
+   */
+  origin?: Point;
+  /**
+   * The leg runs between no two outposts (a redirect that wasn't a straight
+   * reversal), so it shares no lane and meets no other sub.
+   */
+  offLane?: boolean;
 }
 
-export type SpecialistKind = 'queen';
+export type SpecialistCategory = 'offensive' | 'defensive' | 'other';
+
+/**
+ * The specialists built so far (see `specialists.ts` for the catalogue and
+ * `docs/specialists.md` for the plan). Promoted kinds can only be reached by
+ * promoting the base kind, never by hiring.
+ */
+export type SpecialistKind =
+  // always present
+  | 'queen'
+  | 'princess'
+  // hireable
+  | 'helmsman'
+  | 'lieutenant'
+  | 'thief'
+  | 'navigator'
+  | 'foreman'
+  | 'inspector'
+  | 'intelOfficer'
+  | 'hypnotist'
+  // reached by promotion
+  | 'general'
+  | 'admiral'
+  | 'engineer'
+  | 'securityChief'
+  | 'king';
 
 /** Where a specialist is. Exactly one location at a time. */
 export type SpecialistLocation = { outpost: OutpostId } | { sub: SubId };
@@ -72,6 +112,28 @@ export interface Specialist {
   captiveOf: PlayerId | null;
 }
 
+/** The three cards an offer holds: at most one per category. */
+export interface HireOffer {
+  /** Game time the offer appeared. */
+  at: GameTime;
+  /** Categories with a specialist left in their deck; the others are omitted. */
+  kinds: Partial<Record<SpecialistCategory, SpecialistKind>>;
+}
+
+/**
+ * Hiring is part of the game state, not something the server tracks: the
+ * decks are built from the seed in `generateMap`, so a replay offers the
+ * same specialists at the same times.
+ */
+export interface Hiring {
+  /** When the next offer appears (4 h, then every 18 h). */
+  nextOfferAt: GameTime;
+  /** Cards left per category. Drawn cards leave the deck, taken or not. */
+  deck: Record<SpecialistCategory, SpecialistKind[]>;
+  /** The offer waiting to be picked; a new one replaces an ignored one. */
+  offer: HireOffer | null;
+}
+
 export interface Player {
   id: PlayerId;
   name: string;
@@ -83,6 +145,7 @@ export interface Player {
   /** Mines this player drilled themselves (drives the next drill cost). */
   minesDrilled: number;
   eliminated: boolean;
+  hiring: Hiring;
 }
 
 export interface GameState {
@@ -116,7 +179,15 @@ export interface GameState {
  * before it executes. Orders are validated *when they execute*; an order that
  * is no longer valid (e.g. not enough drillers) is skipped and reported.
  */
-export type Order = LaunchOrder | DrillMineOrder | SetShieldOrder | ResignOrder | VoteEndOrder;
+export type Order =
+  | LaunchOrder
+  | DrillMineOrder
+  | SetShieldOrder
+  | ResignOrder
+  | VoteEndOrder
+  | HireOrder
+  | PromoteOrder
+  | RedirectOrder;
 
 interface OrderBase {
   /** Execution time; must be a multiple of `TICK`. */
@@ -158,12 +229,36 @@ export interface VoteEndOrder extends OrderBase {
   agree: boolean;
 }
 
+/**
+ * Take one specialist from the current offer (goal.md → Hiring). Needs a free
+ * Queen at one of the player's own outposts; the new specialist appears
+ * there. `hireSize` copies arrive for the two-at-a-time specialists.
+ */
+export interface HireOrder extends OrderBase {
+  kind: 'hire';
+  choice: SpecialistKind;
+}
+
+/** Promote a specialist standing on one of the player's own outposts. */
+export interface PromoteOrder extends OrderBase {
+  kind: 'promote';
+  specialist: SpecialistId;
+}
+
+/** A Navigator changes its sub's destination once every 8 hours. */
+export interface RedirectOrder extends OrderBase {
+  kind: 'redirect';
+  sub: SubId;
+  to: OutpostId;
+}
+
 // --- Events (what happened; for logs, notifications and the UI) ---------
 
 export type GameEvent =
   | { kind: 'orderRejected'; at: GameTime; order: Order; reason: string }
   | { kind: 'subLaunched'; at: GameTime; sub: SubId; owner: PlayerId; from: OutpostId; to: OutpostId }
   | { kind: 'subArrived'; at: GameTime; sub: SubId; owner: PlayerId; outpost: OutpostId }
+  | { kind: 'subRedirected'; at: GameTime; sub: SubId; owner: PlayerId; from: OutpostId; to: OutpostId }
   | { kind: 'outpostCaptured'; at: GameTime; outpost: OutpostId; from: PlayerId | null; to: PlayerId }
   | {
       kind: 'combat';
@@ -177,6 +272,16 @@ export type GameEvent =
       details: CombatDetails;
     }
   | { kind: 'mineDrilled'; at: GameTime; outpost: OutpostId; player: PlayerId }
+  /** Private: only the player it was offered to sees this. */
+  | { kind: 'specialistOffered'; at: GameTime; player: PlayerId; offer: HireOffer }
+  | { kind: 'specialistHired'; at: GameTime; player: PlayerId; kinds: SpecialistKind[]; outpost: OutpostId }
+  | { kind: 'specialistPromoted'; at: GameTime; player: PlayerId; specialist: SpecialistId; from: SpecialistKind; to: SpecialistKind; outpost: OutpostId }
+  /** A Princess took over as Queen, so the player was not eliminated. */
+  | { kind: 'queenSucceeded'; at: GameTime; player: PlayerId; specialist: SpecialistId; lostQueen: SpecialistId }
+  /** `owners` are the specialists' owners before the capture, so a player
+   *  whose Queen was taken still sees it. */
+  | { kind: 'specialistCaptured'; at: GameTime; specialists: SpecialistId[]; owners: PlayerId[]; by: PlayerId; outpost: OutpostId }
+  | { kind: 'specialistDestroyed'; at: GameTime; specialists: SpecialistId[]; owners: PlayerId[] }
   | { kind: 'playerEliminated'; at: GameTime; player: PlayerId; reason: 'queenCaptured' | 'resigned' }
   | { kind: 'gameWon'; at: GameTime; player: PlayerId; reason: 'neptunium' | 'lastStanding' }
   /**
@@ -200,6 +305,8 @@ export interface CombatDetails {
   /** Defending outpost's shield charge before/after (outpost combat only). */
   shieldBefore?: number;
   shieldAfter?: number;
+  /** What the specialists did, one line each (goal.md → Combat). */
+  effects?: string[];
 }
 
 // --- Player view (fog of war) --------------------------------------------
@@ -215,7 +322,10 @@ export interface OutpostView {
   owner?: PlayerId | null;
   drillers?: number;
   shieldCharge?: number;
+  /** The outpost's own maximum, before any specialist bonus. */
   shieldMax?: number;
+  /** What it actually reaches, with Queen, Security Chief and King applied. */
+  shieldMaxEffective?: number;
   shieldEnabled?: boolean;
   /** Whether this player currently sees inside this outpost. */
   visible: boolean;
@@ -235,6 +345,14 @@ export interface PlayerPublic {
   eliminated: boolean;
 }
 
+/** This player's hiring. The decks stay private to the server. */
+export interface HiringView {
+  /** When their next offer appears. */
+  nextOfferAt: GameTime;
+  /** The offer waiting to be taken, if any. */
+  offer: HireOffer | null;
+}
+
 /** Everything one player is allowed to know. Sent to the client. */
 export interface PlayerView {
   you: PlayerId;
@@ -247,6 +365,8 @@ export interface PlayerView {
   subs: Sub[];
   /** Only specialists at visible locations. */
   specialists: Specialist[];
+  /** This player's hiring, without their decks. */
+  hiring: HiringView;
   winner: PlayerId | null;
   /** See `GameState.endedAt`. */
   endedAt: GameTime | null;

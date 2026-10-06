@@ -14,7 +14,7 @@
       <dd>
         {{ outpost().shieldCharge }} / {{ shieldMax() }}
         @if (shieldMax() !== outpost().shieldMax) {
-          <span class="muted">(+20 from the Queen)</span>
+          <span class="muted">({{ shieldMax()! - outpost().shieldMax! }} from specialists)</span>
         }
         @if (outpost().shieldEnabled === false) {
           <span class="muted">(off)</span>
@@ -103,7 +103,10 @@
         @for (spec of launchForm.specialists; track $index) {
           <label class="check">
             <input type="checkbox" [formField]="spec.selected" />
-            {{ spec.label().value() }}
+            {{ specialistName(spec.kind().value(), view().you) }}
+            @if (specialistHint(spec.kind().value()); as hint) {
+              <span class="muted">· {{ hint }}</span>
+            }
           </label>
         }
         <div class="actions">

@@ -11,6 +11,14 @@ describe('eventVisibleTo', () => {
     [{ kind: 'combat', at: 10, outpost: 'o-2', subs: ['s'], players: ['p1', 'p2'], winner: 'p1', details: { sides: [] } }, ['p1', 'p2']],
     [{ kind: 'mineDrilled', at: 10, outpost: 'o-1', player: 'p1' }, ['p1', 'p2', 'p3']],
     [{ kind: 'gameWon', at: 10, player: 'p1', reason: 'neptunium' }, ['p1', 'p2', 'p3']],
+    [{ kind: 'specialistOffered', at: 10, player: 'p1', offer: { at: 10, kinds: { other: 'princess' } } }, ['p1']],
+    [{ kind: 'specialistHired', at: 10, player: 'p1', kinds: ['princess'], outpost: 'o-1' }, ['p1', 'p2', 'p3']],
+    [
+      { kind: 'specialistCaptured', at: 10, specialists: ['spec-2'], owners: ['p2'], by: 'p1', outpost: 'o-2' },
+      ['p1', 'p2'],
+    ],
+    [{ kind: 'specialistDestroyed', at: 10, specialists: ['spec-3'], owners: ['p2'] }, ['p2']],
+    [{ kind: 'subRedirected', at: 10, sub: 's', owner: 'p1', from: 'o-1', to: 'o-2' }, ['p1']],
   ];
 
   it.each(cases)('%o is visible only to %o', (event, allowed) => {
@@ -34,10 +42,11 @@ describe('imminentLaunchesFor', () => {
     ],
     subs: [],
     specialists: [],
+    hiring: { nextOfferAt: Number.MAX_SAFE_INTEGER, offer: null },
     winner: null,
     endedAt: null,
     endVotes: [],
-  } as PlayerView;
+  } as unknown as PlayerView;
   const launch = (id: string, from: string, to: string, at: number, player = 'p1') => ({
     id,
     order: { kind: 'launch', from, to, drillers: 10, specialists: [], at, player } as Order,

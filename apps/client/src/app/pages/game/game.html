@@ -25,12 +25,13 @@
         [clock]="clock()!"
         [selection]="selection()"
         [pending]="tm.pending()"
-        [launchFromId]="launchFromId()"
+        [launchFromId]="redirectSubId() ? null : launchFromId()"
         [launchTargetId]="launchTargetId()"
         [battles]="battles()"
         [imminent]="imminent()"
         [fixedMinute]="tm.scrub()"
         [launchAt]="plannedLaunchAt()"
+        [launchSpeed]="launchSpeed()"
         (pick)="onMapPick($event)"
       />
       <sub-time-bar [liveMinute]="liveMinute()" />
@@ -52,10 +53,21 @@
           [launchTargetId]="launchTargetId()"
           (launchStart)="startLaunch()"
           (launchCancel)="cancelLaunch()"
+          (launchSpeed)="launchSpeed.set($event)"
           (selectSub)="select({ kind: 'sub', id: $event })"
         />
       } @else if (selectedSub(); as sub) {
-        <sub-sub-panel [view]="view()!" [sub]="sub" [minute]="minute()" />
+        <sub-sub-panel
+          [view]="view()!"
+          [sub]="sub"
+          [minute]="minute()"
+          [redirecting]="redirectSubId() === sub.id"
+          (redirectStart)="startRedirect(sub.id)"
+          (redirectCancel)="cancelRedirect()"
+        />
+        @if (redirectError()) {
+          <p class="card error" role="alert">{{ redirectError() }}</p>
+        }
       } @else if (selectedOrder(); as order) {
         <sub-order-panel
           [gameId]="snap.gameId"
@@ -80,6 +92,7 @@
           }
         </p>
       }
+      <sub-hire-panel [gameId]="snap.gameId" [view]="view()!" [pending]="tm.pending()" />
       <sub-orders-panel
         [gameId]="snap.gameId"
         [view]="view()!"

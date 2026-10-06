@@ -7,6 +7,8 @@ export * from './random.js';
 export * from './geometry.js';
 export * from './map.js';
 export * from './simulation.js';
+export * from './specialists.js';
+export * from './hiring.js';
 export * from './visibility.js';
 export * from './forecast.js';
 export * from './protocol.js';

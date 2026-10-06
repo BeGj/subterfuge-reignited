@@ -1,5 +1,5 @@
-import { SONAR_RANGE } from './constants.js';
 import { distance } from './geometry.js';
+import { revealsOutpostTypes, shieldMaxAt, sonarRangeAt } from './specialists.js';
 import { shieldCharge } from './shield.js';
 import { subPosition } from './simulation.js';
 import type { GameState, OutpostView, PlayerId, PlayerView, Point, Sub } from './types.js';
@@ -22,9 +22,23 @@ export interface ViewOptions {
   revealOwners?: boolean;
 }
 
+/** One player's hiring for their own panel: the offer and when the next appears. */
+function hiringViewFor(state: GameState, player: PlayerId) {
+  const hiring = state.players.find((p) => p.id === player)?.hiring;
+  return {
+    nextOfferAt: hiring?.nextOfferAt ?? Number.MAX_SAFE_INTEGER,
+    offer: hiring?.offer ? structuredClone(hiring.offer) : null,
+  };
+}
+
 export function viewFor(state: GameState, player: PlayerId, options: ViewOptions = {}): PlayerView {
-  const sonar = state.outposts.filter((o) => o.owner === player).map((o) => o.position);
-  const inSonar = (p: Point) => sonar.some((s) => distance(s, p) <= SONAR_RANGE);
+  // Sonar has a range per outpost: a Princess extends her own, an
+  // Intelligence Officer every one of theirs.
+  const sonar = state.outposts
+    .filter((o) => o.owner === player)
+    .map((o) => ({ at: o.position, range: sonarRangeAt(state, o) }));
+  const inSonar = (p: Point) => sonar.some((s) => distance(s.at, p) <= s.range);
+  const seeTypes = revealsOutpostTypes(state, player);
 
   const visibleOutposts = new Set<string>();
   const outposts: OutpostView[] = state.outposts.map((o) => {
@@ -34,7 +48,7 @@ export function viewFor(state: GameState, player: PlayerId, options: ViewOptions
         id: o.id,
         name: o.name,
         position: { ...o.position },
-        ...(o.type === 'mine' ? { type: o.type } : {}),
+        ...(o.type === 'mine' || seeTypes ? { type: o.type } : {}),
         ...(options.revealOwners ? { owner: o.owner } : {}),
         visible: false,
       };
@@ -49,6 +63,7 @@ export function viewFor(state: GameState, player: PlayerId, options: ViewOptions
       drillers: o.drillers,
       shieldCharge: shieldCharge(o.shieldProgress),
       shieldMax: o.shieldMax,
+      shieldMaxEffective: shieldMaxAt(state, o),
       shieldEnabled: o.shieldEnabled,
       visible: true,
     };
@@ -86,6 +101,8 @@ export function viewFor(state: GameState, player: PlayerId, options: ViewOptions
     outposts,
     subs: structuredClone(subs),
     specialists: structuredClone(specialists),
+    // Only this player's own hiring; their decks stay on the server.
+    hiring: hiringViewFor(state, player),
     winner: state.winner,
     endedAt: state.endedAt,
     endVotes: [...state.endVotes],

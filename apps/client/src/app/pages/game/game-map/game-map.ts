@@ -158,6 +158,8 @@ export class GameMap {
   readonly fixedMinute = input<number | null>(null);
   /** When a planned launch would leave, if not "after the launch delay". */
   readonly launchAt = input<number | undefined>(undefined);
+  /** Speed of the planned launch's cargo (1 without speed specialists). */
+  readonly launchSpeed = input(1);
 
   /** Something was clicked (or `null` for empty water). */
   readonly pick = output<Selection | null>();
@@ -224,6 +226,7 @@ export class GameMap {
       this.imminent();
       this.fixedMinute();
       this.launchAt();
+      this.launchSpeed();
       this.hover();
       this.requestDraw();
     });
@@ -280,6 +283,7 @@ export class GameMap {
         launchFromId: this.launchFromId(),
         launchTargetId: this.launchTargetId(),
         launchAt: this.launchAt(),
+        launchSpeed: this.launchSpeed(),
         imminent: this.imminent(),
         markers: orderMarkers(this.view(), this.pending(), minute),
       });

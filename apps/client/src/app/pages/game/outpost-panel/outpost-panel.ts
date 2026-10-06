@@ -1,13 +1,20 @@
-import { Component, computed, inject, input, linkedSignal, output, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, linkedSignal, output, signal, untracked } from '@angular/core';
 import { FormField, form, max, min, submit } from '@angular/forms/signals';
-import { mineDrillCost, type OrderInput, type OutpostView, type PlayerView } from '@subterfuge/engine';
+import {
+  cargoSpeed,
+  mineDrillCost,
+  specialistName,
+  type OrderInput,
+  type OutpostView,
+  type PlayerView,
+  type SpecialistKind,
+} from '@subterfuge/engine';
 import { Realtime } from '../../../core/realtime';
 import { namesFor } from '../describe';
 import { formatDuration, formatGameTime, plannedTripLabel } from '../format';
 import { travelMinutes } from '../geometry';
 import { estimatedLaunchAt } from '../overlays';
 import { TimeMachine } from '../time-machine';
-import { effectiveShieldMax } from '../shield-rings';
 import { outcomeFor, outcomeSummary } from '../time-math';
 
 const TYPE_LABELS: Record<string, string> = { factory: 'Factory', generator: 'Generator', mine: 'Mine' };
@@ -37,6 +44,8 @@ export class OutpostPanel {
 
   readonly launchStart = output<void>();
   readonly launchCancel = output<void>();
+  /** The planned trip's speed, so the map's travel label agrees with the form. */
+  readonly launchSpeed = output<number>();
   /** A sub in the "incoming" list was chosen. */
   readonly selectSub = output<string>();
 
@@ -62,8 +71,11 @@ export class OutpostPanel {
     this.specialistsHere().filter((s) => s.owner === this.view().you && s.captiveOf === null),
   );
 
-  /** Shield maximum including the Queen's bonus. */
-  protected readonly shieldMax = computed(() => effectiveShieldMax(this.view(), this.outpost()));
+  /**
+   * The shield maximum the engine worked out (Queen, Security Chief, King
+   * included); the view also carries the outpost's own maximum for reference.
+   */
+  protected readonly shieldMax = computed(() => this.outpost().shieldMaxEffective ?? this.outpost().shieldMax);
 
   protected readonly drillCost = computed(() => {
     const me = this.view().players.find((p) => p.id === this.view().you);
@@ -83,11 +95,27 @@ export class OutpostPanel {
       : undefined;
     return scheduled ?? estimatedLaunchAt(this.minute());
   });
+  /** Speed of the cargo currently ticked in the launch form. */
+  protected readonly cargoSpeed = computed(() => {
+    const target = this.target();
+    if (!target) return 1;
+    const view = this.view();
+    const kinds = this.launchModel()
+      .specialists.filter((s) => s.selected)
+      .map((s): SpecialistKind => s.kind);
+    return cargoSpeed(kinds, {
+      toOwnOutpost: target.owner === view.you,
+      ownerHasAdmiral: view.specialists.some((s) => s.kind === 'admiral' && s.owner === view.you && s.captiveOf === null),
+    });
+  });
+
+  private readonly reportSpeed = effect(() => this.launchSpeed.emit(this.cargoSpeed()));
+
   /** "travel 11h 40m · arrives ~Day 2, 03:40" (see plannedTripLabel). */
   protected readonly travel = computed(() => {
     const target = this.target();
     if (!target) return '';
-    const travel = travelMinutes(this.outpost().position, target.position);
+    const travel = travelMinutes(this.outpost().position, target.position, this.cargoSpeed());
     return plannedTripLabel(travel, this.launchAt() + travel);
   });
   /** Shown while scrubbed into the future: orders become scheduled. */
@@ -141,15 +169,15 @@ export class OutpostPanel {
    * specialists there change — not on every server update, which would wipe
    * what the player typed. The `max` validator tracks the live driller count.
    */
+  // A computed, so the key only notifies when the string really changes: a
+  // linkedSignal re-runs its computation whenever anything its `source`
+  // reads changes, and `boardable()` is a new array on every update.
+  private readonly launchKey = computed(() => `${this.outpost().id}|${this.boardable().map((s) => s.id).join(',')}`);
   protected readonly launchModel = linkedSignal({
-    source: () => `${this.outpost().id}|${this.boardable().map((s) => s.id).join(',')}`,
+    source: this.launchKey,
     computation: () => ({
       drillers: untracked(() => this.outpost().drillers ?? 0),
-      specialists: untracked(() => this.boardable()).map((s) => ({
-        id: s.id,
-        label: s.kind === 'queen' ? 'Queen' : s.kind,
-        selected: false,
-      })),
+      specialists: untracked(() => this.boardable()).map((s) => ({ id: s.id, kind: s.kind, selected: false })),
     }),
   });
   protected readonly launchForm = form(this.launchModel, (path) => {
@@ -157,8 +185,31 @@ export class OutpostPanel {
     max(path.drillers, () => this.outpost().drillers ?? 0, { message: 'Not that many drillers here.' });
   });
 
-  protected specialistName(kind: string, owner: string): string {
-    return `${kind === 'queen' ? 'Queen' : kind} (${this.names().player(owner)})`;
+  /** "Queen (You)", or "Thief · captive" handled in the template. */
+  protected specialistName(kind: SpecialistKind, owner: string): string {
+    return `${specialistName(kind)} (${this.names().player(owner)})`;
+  }
+
+  /** What a specialist on this sub would do, as a short hint. */
+  protected specialistHint(kind: SpecialistKind): string {
+    switch (kind) {
+      case 'helmsman':
+        return '2× speed';
+      case 'lieutenant':
+      case 'general':
+      case 'admiral':
+        return '1.5× speed';
+      case 'navigator':
+        return 'can redirect';
+      case 'inspector':
+      case 'securityChief':
+        return 'recharges the shield';
+      case 'queen':
+      case 'princess':
+        return 'can be captured';
+      default:
+        return '';
+    }
   }
 
   protected onLaunch(event: Event): void {

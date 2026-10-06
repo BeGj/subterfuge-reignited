@@ -1,4 +1,4 @@
-import type { OrderInput } from '@subterfuge/engine';
+import { SPECIALISTS, type OrderInput, type SpecialistKind } from '@subterfuge/engine';
 
 /**
  * Structural check for orders arriving over Socket.IO. Payloads are
@@ -37,6 +37,17 @@ export function parseOrderInput(value: unknown): OrderInput | string {
         return 'setShield needs an `outpost` id and `enabled` boolean.';
       }
       return { kind: 'setShield', outpost: o['outpost'] as string, enabled: o['enabled'] as boolean };
+    case 'hire': {
+      const choice = o['choice'];
+      if (typeof choice !== 'string' || !Object.hasOwn(SPECIALISTS, choice)) return 'hire needs a known `choice` specialist.';
+      return { kind: 'hire', choice: choice as SpecialistKind };
+    }
+    case 'promote':
+      if (!isId(o['specialist'])) return 'promote needs a `specialist` id.';
+      return { kind: 'promote', specialist: o['specialist'] as string };
+    case 'redirect':
+      if (!isId(o['sub']) || !isId(o['to'])) return 'redirect needs a `sub` id and a `to` outpost id.';
+      return { kind: 'redirect', sub: o['sub'] as string, to: o['to'] as string };
     case 'resign':
       return { kind: 'resign' };
     case 'voteEnd':

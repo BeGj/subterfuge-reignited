@@ -7,6 +7,7 @@ import { gameMinuteAt, syncClock, type ClockSync } from './clock';
 import { formatGameTime, formatSpeed } from './format';
 import { EventsPanel } from './events-panel/events-panel';
 import { GameMap } from './game-map/game-map';
+import { HirePanel } from './hire-panel/hire-panel';
 import { OrdersPanel } from './orders-panel/orders-panel';
 import { OutpostPanel } from './outpost-panel/outpost-panel';
 import { StatusPanel } from './status-panel/status-panel';
@@ -24,7 +25,7 @@ import { TimeMachine } from './time-machine';
 /** The in-game screen: live map plus panels for the selection, orders and status. */
 @Component({
   selector: 'sub-game',
-  imports: [RouterLink, GameMap, OutpostPanel, SubPanel, OrderPanel, BattlePanel, StatusPanel, OrdersPanel, EventsPanel, TimeBar],
+  imports: [RouterLink, GameMap, OutpostPanel, SubPanel, OrderPanel, BattlePanel, StatusPanel, OrdersPanel, EventsPanel, TimeBar, HirePanel],
   templateUrl: './game.html',
   styleUrl: './game.css',
   providers: [TimeMachine],
@@ -43,9 +44,14 @@ export class Game {
 
   protected readonly selection = signal<Selection | null>(null);
   protected readonly launchFromId = signal<string | null>(null);
+  /** The planned launch's speed (its cargo), reported by the outpost panel. */
+  protected readonly launchSpeed = signal(1);
   protected readonly launchTargetId = signal<string | null>(null);
   /** Set while a pending launch's target is being re-picked on the map. */
   protected readonly editingOrderId = signal<string | null>(null);
+  /** Set while a sub's new destination is being picked on the map. */
+  protected readonly redirectSubId = signal<string | null>(null);
+  protected readonly redirectError = signal('');
 
   /** Wall clock, ticking once a second for text displays. */
   private readonly now = signal(Date.now());
@@ -185,6 +191,11 @@ export class Game {
   }
 
   protected onMapPick(target: Selection | null): void {
+    const redirecting = this.redirectSubId();
+    if (redirecting) {
+      if (target?.kind === 'outpost') void this.redirectSub(redirecting, target.id);
+      return;
+    }
     const from = this.launchFromId();
     if (from) {
       // Picking a launch target (new launch, or re-targeting a pending one).
@@ -192,6 +203,25 @@ export class Game {
       return;
     }
     this.selection.set(target);
+  }
+
+  /** A Navigator's sub is being re-routed: the player picks the new target. */
+  protected startRedirect(sub: string): void {
+    this.cancelLaunch();
+    this.selection.set({ kind: 'sub', id: sub });
+    this.redirectSubId.set(sub);
+    this.redirectError.set('');
+  }
+
+  protected async redirectSub(sub: string, to: string): Promise<void> {
+    this.redirectError.set('');
+    try {
+      await this.realtime.issueOrder({ gameId: this.id(), order: { kind: 'redirect', sub, to } });
+      // Done picking: the next map click selects again.
+      this.cancelRedirect();
+    } catch (err) {
+      this.redirectError.set(err instanceof Error ? err.message : apiErrorMessage(err));
+    }
   }
 
   protected select(target: Selection): void {
@@ -206,6 +236,7 @@ export class Game {
 
   /** Re-pick the target of a pending launch on the map. */
   protected startRetarget(from: string): void {
+    this.launchSpeed.set(1); // the order's own cargo isn't in a launch form
     this.editingOrderId.set(this.selection()?.id ?? null);
     this.launchFromId.set(from);
     this.launchTargetId.set(null);
@@ -237,13 +268,19 @@ export class Game {
     }
   }
 
-  /** Esc: leave launch mode first, then leave the forecast. */
+  /** Esc: leave redirect mode, then launch mode, then the forecast. */
   protected onEscape(): void {
-    if (this.launchFromId()) this.cancelLaunch();
+    if (this.redirectSubId()) this.cancelRedirect();
+    else if (this.launchFromId()) this.cancelLaunch();
     else if (this.tm.active()) this.tm.backToNow();
   }
 
+  protected cancelRedirect(): void {
+    this.redirectSubId.set(null);
+  }
+
   protected cancelLaunch(): void {
+    this.launchSpeed.set(1);
     this.launchFromId.set(null);
     this.launchTargetId.set(null);
     this.editingOrderId.set(null);

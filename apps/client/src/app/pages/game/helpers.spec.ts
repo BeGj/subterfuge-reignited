@@ -1,4 +1,4 @@
-import type { OutpostView, Sub } from '@subterfuge/engine';
+import { cargoSpeed, type OutpostView, type Sub } from '@subterfuge/engine';
 import { fitPoints, pan, toMap, toScreen, zoomAt } from './camera';
 import { gameMinuteAt, minutesToNextProduction, syncClock } from './clock';
 import { describeEvent, describeOrder, namesFor } from './describe';
@@ -31,6 +31,17 @@ describe('geometry', () => {
     expect(travelMinutes({ x: 0, y: 0 }, { x: 361, y: 0 })).toBe(370);
   });
 
+  it('shortens the trip for a fast cargo, using the engine\'s rule', () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 1200, y: 0 };
+    expect(travelMinutes(a, b)).toBe(1200);
+    // A Helmsman at 2×: the fastest specialist wins, so a Lieutenant on board
+    // doesn't make it slower.
+    expect(travelMinutes(a, b, cargoSpeed(['helmsman']))).toBe(600);
+    expect(travelMinutes(a, b, cargoSpeed(['helmsman', 'lieutenant']))).toBe(600);
+    expect(travelMinutes(a, b, cargoSpeed([], { ownerHasAdmiral: true }))).toBe(800);
+  });
+
   it('interpolates subs and clamps to the route', () => {
     const sub = { launchedAt: 100, arrivesAt: 200 } as Sub;
     const from = { x: 0, y: 0 };
@@ -38,6 +49,14 @@ describe('geometry', () => {
     expect(subPositionAt(sub, from, to, 150)).toEqual({ x: 50, y: 25 });
     expect(subPositionAt(sub, from, to, 50)).toEqual(from);
     expect(subPositionAt(sub, from, to, 999)).toEqual(to);
+  });
+
+  it('starts a redirected sub at the point where it turned', () => {
+    const sub = { launchedAt: 100, arrivesAt: 200, origin: { x: 40, y: 0 } } as Sub;
+    const from = { x: 0, y: 0 };
+    const to = { x: 140, y: 0 };
+    expect(subPositionAt(sub, from, to, 100)).toEqual({ x: 40, y: 0 });
+    expect(subPositionAt(sub, from, to, 150)).toEqual({ x: 90, y: 0 });
   });
 
   it('hit-tests the nearest outpost within the radius', () => {
@@ -119,6 +138,54 @@ describe('describe', () => {
     expect(describeEvent({ kind: 'playerEliminated', at: 0, player: 'p2', reason: 'queenCaptured' }, names)).toBe(
       'bob was eliminated (Queen captured)',
     );
+  });
+
+  it('names specialists, and describes hiring, promoting and redirecting', () => {
+    expect(describeOrder({ kind: 'hire', at: 10, player: 'p1', choice: 'securityChief' }, names)).toBe(
+      'Hire a Security Chief',
+    );
+    expect(describeOrder({ kind: 'promote', at: 10, player: 'p1', specialist: 'spec-3' }, names)).toBe(
+      'Promote a specialist',
+    );
+    expect(describeOrder({ kind: 'redirect', at: 10, player: 'p1', sub: 'sub-1', to: 'o-2' }, names)).toBe(
+      'Redirect a sub to Vorn',
+    );
+    expect(
+      describeEvent(
+        { kind: 'specialistHired', at: 0, player: 'p1', kinds: ['lieutenant'], outpost: 'o-1' },
+        names,
+      ),
+    ).toBe('You hired Lieutenant at Kelthal');
+    expect(
+      describeEvent({ kind: 'queenSucceeded', at: 0, player: 'p1', specialist: 'spec-2', lostQueen: 'spec-1' }, names),
+    ).toBe('A Princess took over as Queen for you');
+  });
+
+  it('shows what the specialists did in a fight, and reads naturally for you', () => {
+    const sides = [
+      { player: 'p1', drillersBefore: 0, drillersAfter: 0, specialists: 1 },
+      { player: 'p2', drillersBefore: 40, drillersAfter: 34, specialists: 0 },
+    ];
+    expect(
+      describeEvent(
+        {
+          kind: 'combat',
+          at: 0,
+          outpost: 'o-2',
+          subs: ['sub-4'],
+          players: ['p1', 'p2'],
+          winner: 'p2',
+          details: { sides, effects: ['Thief stole 6 drillers'] },
+        },
+        names,
+      ),
+    ).toBe('Combat at Vorn: bob won (Thief stole 6 drillers)');
+    expect(describeEvent({ kind: 'subArrived', at: 0, sub: 'sub-4', owner: 'p1', outpost: 'o-2' }, names)).toBe(
+      'Your sub arrived at Vorn',
+    );
+    expect(
+      describeEvent({ kind: 'specialistCaptured', at: 0, specialists: ['spec-3'], owners: ['p1'], by: 'p2', outpost: 'o-2' }, names),
+    ).toBe('bob captured a specialist at Vorn');
   });
 });
 

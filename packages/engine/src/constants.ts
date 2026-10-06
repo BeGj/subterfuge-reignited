@@ -21,8 +21,9 @@ export const DAY = 24 * HOUR;
  * History:
  * - 1: constant-area maps, simultaneous production, draws, resign.
  * - 2: disabling a shield drops it to 0 and stops charging; capture re-enables it.
+ * - 3: hiring, promotion and specialist effects (docs/specialists.md).
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** The simulation resolves orders and events on 10-minute ticks. */
 export const TICK = 10 * MINUTE;
@@ -95,7 +96,51 @@ export const FUNDING_DRILLERS_PER_CYCLE = 2;
 
 export const FIRST_HIRE_AT = 4 * HOUR;
 export const HIRE_INTERVAL = 18 * HOUR;
+/** Copies of every hireable specialist in a category's deck. */
+export const HIRE_DECK_COPIES = 3;
 export const QUEEN_SHIELD_BONUS = 20;
+/** Security Chief: everywhere, plus this much again at her own outpost. */
+export const SECURITY_CHIEF_SHIELD_BONUS = 10;
+/** King: this much less everywhere, except at his own outpost, where he adds it. */
+export const KING_SHIELD_DELTA = -20;
+/** Princess sonar at her outpost; Intelligence Officer sonar everywhere. */
+export const PRINCESS_SONAR_MULTIPLIER = 1.5;
+export const INTEL_OFFICER_SONAR_MULTIPLIER = 1.25;
+/** How long a sub may not be redirected again (Navigator). */
+export const NAVIGATOR_COOLDOWN = 8 * HOUR;
+
+// --- Specialist effects ---------------------------------------------------
+
+/** Travel speed multipliers. Several specialists on one sub: the fastest wins. */
+export const HELMSMAN_SPEED = 2;
+export const OFFICER_SPEED = 1.5;
+export const SMUGGLER_SPEED = 3;
+export const ADMIRAL_GLOBAL_SPEED = 1.5;
+
+/** Enemy drillers destroyed in combat. */
+export const LIEUTENANT_DRILLERS_DESTROYED = 5;
+export const GENERAL_DRILLERS_DESTROYED = 10;
+export const WAR_HERO_DRILLERS_DESTROYED = 20;
+/** King's: this many of your drillers left destroy one enemy driller. */
+export const KING_DRILLERS_PER_ENEMY_DESTROYED = 4;
+/** Share of enemy drillers a Thief converts (rounded up). */
+export const THIEF_DRILLER_SHARE = 0.15;
+
+/** Foreman's extra drillers per cycle, and her radius as a share of sonar. */
+export const FOREMAN_DRILLERS_PER_CYCLE = 4;
+export const FOREMAN_RADIUS_SHARE = 0.5;
+/** Engineer repairs this share (rounded up) of the drillers you lost. */
+export const ENGINEER_REPAIR_SHARE = 0.25;
+
+/** Tinkerer: electrical output per point of max shield, and shield drain. */
+export const TINKERER_ELECTRICAL_PER_SHIELD = 3;
+export const TINKERER_SHIELD_DRAIN_PER_HOUR = 3;
+/** Minister of Energy trades factories for electrical output. */
+export const MINISTER_OF_ENERGY_ELECTRICAL = 300;
+export const MINISTER_OF_ENERGY_DRILLER_PENALTY = 1;
+/** Tycoon: a share faster cycles, which we implement as more drillers per cycle. */
+export const TYCOON_RATE_MULTIPLIER = 1.5;
+export const TYCOON_LOCAL_DRILLERS = 3;
 
 // --- Elimination ---------------------------------------------------------
 

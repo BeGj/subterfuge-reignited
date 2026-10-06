@@ -6,8 +6,12 @@ import { isSelected, sameSelection, type Selection } from './selection';
 const view = {
   you: 'p1',
   outposts: [
-    { id: 'o-1', name: 'A', position: { x: 0, y: 0 }, visible: true },
-    { id: 'o-2', name: 'B', position: { x: 100, y: 0 }, visible: true },
+    { id: 'o-1', name: 'A', position: { x: 0, y: 0 }, visible: true, owner: 'p1' },
+    { id: 'o-2', name: 'B', position: { x: 100, y: 0 }, visible: true, owner: 'p2' },
+  ],
+  specialists: [
+    { id: 'spec-q', kind: 'queen', owner: 'p1', location: { outpost: 'o-1' }, captiveOf: null },
+    { id: 'spec-l', kind: 'lieutenant', owner: 'p1', location: { outpost: 'o-2' }, captiveOf: null },
   ],
 } as unknown as PlayerView;
 
@@ -37,6 +41,24 @@ describe('orderMarkers', () => {
       { orderId: '1', kind: 'launch', anchor: { x: 0, y: 0 }, target: { x: 100, y: 0 }, text: '10m · 20' },
       { orderId: '2', kind: 'outpost', anchor: { x: 100, y: 0 }, text: 'Shield off 10m' },
       { orderId: '3', kind: 'outpost', anchor: { x: 0, y: 0 }, text: 'Mine 10m' },
+    ]);
+  });
+
+  it('marks hires and promotions where the specialist will be', () => {
+    const markers = orderMarkers(
+      view,
+      [
+        pending({ kind: 'hire', choice: 'princess' }, '1'),
+        pending({ kind: 'promote', specialist: 'spec-l' }, '2'),
+        pending({ kind: 'redirect', sub: 'sub-1', to: 'o-2' }, '3'),
+        pending({ kind: 'voteEnd', agree: true }, '4'),
+      ],
+      110,
+    );
+    expect(markers).toEqual([
+      { orderId: '1', kind: 'outpost', anchor: { x: 0, y: 0 }, text: 'Hire 10m' },
+      { orderId: '2', kind: 'outpost', anchor: { x: 100, y: 0 }, text: 'Promote 10m' },
+      { orderId: '3', kind: 'outpost', anchor: { x: 100, y: 0 }, text: 'Redirect 10m' },
     ]);
   });
 

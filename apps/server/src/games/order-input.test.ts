@@ -74,8 +74,27 @@ describe('parseOrderInput with hostile payloads', () => {
     ['specialists as object', { kind: 'launch', from: 'o-1', to: 'o-2', drillers: 1, specialists: { 0: 'spec-1' } }],
     ['too many specialists', { kind: 'launch', from: 'o-1', to: 'o-2', drillers: 1, specialists: Array(51).fill('s') }],
     ['shield enabled as string', { kind: 'setShield', outpost: 'o-1', enabled: 'false' }],
+    ['unknown specialist', { kind: 'hire', choice: 'martyr' }],
+    ['hire choice as object', { kind: 'hire', choice: { kind: 'princess' } }],
+    ['hire choice from the prototype', { kind: 'hire', choice: 'toString' }],
+    ['promote without specialist', { kind: 'promote' }],
+    ['promote specialist as number', { kind: 'promote', specialist: 3 }],
+    ['redirect without target', { kind: 'redirect', sub: 'sub-1' }],
+    ['redirect sub as object', { kind: 'redirect', sub: {}, to: 'o-2' }],
   ])('rejects %s', (_name, input) => {
     expect(typeof parseOrderInput(input)).toBe('string');
+  });
+
+  it.each([
+    ['hire', { kind: 'hire', choice: 'lieutenant' }, { kind: 'hire', choice: 'lieutenant' }],
+    ['promote', { kind: 'promote', specialist: 'spec-7' }, { kind: 'promote', specialist: 'spec-7' }],
+    [
+      'redirect',
+      { kind: 'redirect', sub: 'sub-1', to: 'o-9' },
+      { kind: 'redirect', sub: 'sub-1', to: 'o-9' },
+    ],
+  ])('parses %s', (_name, input, expected) => {
+    expect(parseOrderInput(input)).toEqual(expected);
   });
 
   it('returns plain data (no references to the input)', () => {

@@ -1,4 +1,4 @@
-import { LAUNCH_DELAY, TICK, type PendingOrder, type PlayerView, type Point } from '@subterfuge/engine';
+import { LAUNCH_DELAY, TICK, outpostOfSpec, type PendingOrder, type PlayerView, type Point } from '@subterfuge/engine';
 import { toScreen, type Camera, type Viewport } from './camera';
 import { formatDuration } from './format';
 
@@ -13,6 +13,7 @@ export function estimatedLaunchAt(minute: number): number {
  */
 export interface OrderMarker {
   orderId: string;
+  /** `hire` and `promote` show on the outpost the specialist is at. */
   kind: 'launch' | 'outpost';
   /** Map position of the origin / affected outpost. */
   anchor: Point;
@@ -26,22 +27,47 @@ export function orderMarkers(view: PlayerView, pending: readonly PendingOrder[],
   const pos = new Map(view.outposts.map((o) => [o.id, o.position]));
   const markers: OrderMarker[] = [];
   for (const p of pending) {
-    const wait = formatDuration(Math.max(0, p.order.at - minute));
-    switch (p.order.kind) {
+    // A const, so the discriminated union stays narrowed inside the callbacks.
+    const order = p.order;
+    const wait = formatDuration(Math.max(0, order.at - minute));
+    switch (order.kind) {
       case 'launch': {
-        const anchor = pos.get(p.order.from);
-        const target = pos.get(p.order.to);
-        if (anchor && target) markers.push({ orderId: p.id, kind: 'launch', anchor, target, text: `${wait} · ${p.order.drillers}` });
+        const anchor = pos.get(order.from);
+        const target = pos.get(order.to);
+        if (anchor && target) markers.push({ orderId: p.id, kind: 'launch', anchor, target, text: `${wait} · ${order.drillers}` });
         break;
       }
       case 'drillMine':
       case 'setShield': {
-        const anchor = pos.get(p.order.outpost);
-        const what = p.order.kind === 'drillMine' ? 'Mine' : p.order.enabled ? 'Shield on' : 'Shield off';
+        const anchor = pos.get(order.outpost);
+        const what = order.kind === 'drillMine' ? 'Mine' : order.enabled ? 'Shield on' : 'Shield off';
         if (anchor) markers.push({ orderId: p.id, kind: 'outpost', anchor, text: `${what} ${wait}` });
         break;
       }
+      case 'redirect': {
+        const anchor = pos.get(order.to);
+        if (anchor) markers.push({ orderId: p.id, kind: 'outpost', anchor, text: `Redirect ${wait}` });
+        break;
+      }
+      case 'hire': {
+        // The new specialist appears where the Queen is.
+        const player = order.player;
+        const queen = view.specialists.find(
+          (s) => s.kind === 'queen' && s.owner === player && outpostOfSpec(s) !== null,
+        );
+        const anchor = queen ? pos.get(outpostOfSpec(queen)!) : undefined;
+        if (anchor) markers.push({ orderId: p.id, kind: 'outpost', anchor, text: `Hire ${wait}` });
+        break;
+      }
+      case 'promote': {
+        const wanted = order.specialist;
+        const spec = view.specialists.find((s) => s.id === wanted);
+        const anchor = spec ? pos.get(outpostOfSpec(spec) ?? '') : undefined;
+        if (anchor) markers.push({ orderId: p.id, kind: 'outpost', anchor, text: `Promote ${wait}` });
+        break;
+      }
       case 'resign':
+      case 'voteEnd':
         break;
     }
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FACTORY_CYCLE, MINE_LOSS_PENALTY, NEPTUNIUM_TO_WIN, NEPTUNIUM_UNIT, TICK } from './constants.js';
+import { inertHiring } from './hiring.js';
 import { progressForCharge, shieldCharge } from './shield.js';
 import { advance, subPosition, travelTime, validateOrder } from './simulation.js';
 import type { GameState, LaunchOrder, Order, Outpost } from './types.js';
@@ -33,8 +34,8 @@ function makeState(over: Partial<GameState> = {}): GameState {
     width: 6000,
     height: 2000,
     players: [
-      { id: 'p1', name: 'One', neptunium: 0, minesDrilled: 0, eliminated: false },
-      { id: 'p2', name: 'Two', neptunium: 0, minesDrilled: 0, eliminated: false },
+      { id: 'p1', name: 'One', neptunium: 0, minesDrilled: 0, eliminated: false, hiring: inertHiring() },
+      { id: 'p2', name: 'Two', neptunium: 0, minesDrilled: 0, eliminated: false, hiring: inertHiring() },
     ],
     outposts: [
       outpost('A', 0, 'p1', 40),
@@ -115,22 +116,32 @@ describe('advance', () => {
   });
 
   it('captures specialists of a losing attacker', () => {
+    const base = makeState();
+    // A Helmsman, so the attacker is captured with someone who doesn't act.
+    base.specialists.push({ id: 'h1', kind: 'helmsman', owner: 'p1', location: { outpost: 'A' }, captiveOf: null });
     const { state } = advance(
-      makeState(),
-      [launch({ player: 'p1', from: 'A', to: 'E', drillers: 1, specialists: ['q1'] })],
+      base,
+      [launch({ player: 'p1', from: 'A', to: 'E', drillers: 1, specialists: ['h1'] })],
       610,
     );
-    expect(state.specialists.find((s) => s.id === 'q1')).toMatchObject({ captiveOf: 'p2', location: { outpost: 'E' } });
-    expect(player(state, 'p1').eliminated).toBe(true);
-    expect(state.winner).toBe('p2');
+    expect(state.specialists.find((s) => s.id === 'h1')).toMatchObject({
+      captiveOf: 'p2',
+      owner: 'p1',
+      location: { outpost: 'E' },
+    });
+    expect(player(state, 'p1').eliminated).toBe(false);
   });
 
-  it('eliminates a player whose Queen is captured and ends a 2-player game', () => {
+  it('turns a captured Queen into a prisoner Princess and eliminates her owner', () => {
     const base = makeState();
     find(base, 'E').shieldEnabled = false;
     base.specialists[1]!.location = { outpost: 'E' };
     const { state, events } = advance(base, [launch({ player: 'p1', from: 'A', to: 'E', drillers: 20 })], 700);
-    expect(state.specialists.find((s) => s.id === 'q2')).toMatchObject({ captiveOf: 'p1' });
+    expect(state.specialists.find((s) => s.id === 'q2')).toMatchObject({
+      kind: 'princess',
+      owner: 'p1',
+      captiveOf: null,
+    });
     expect(player(state, 'p2')).toMatchObject({ eliminated: true, neptunium: 0 });
     expect(state.winner).toBe('p1');
     expect(events).toContainEqual({ kind: 'gameWon', at: 610, player: 'p1', reason: 'lastStanding' });
@@ -362,21 +373,16 @@ describe('gifts', () => {
 });
 
 describe('game end', () => {
-  it('ends in a draw when the last players lose their Queens in the same tick', () => {
-    const s = makeState({
-      outposts: [
-        outpost('A', 0, 'p1', 0),
-        outpost('X1', 0, 'p1', 0, { position: { x: 0, y: 500 } }),
-        outpost('Q', 3000, 'p2', 0),
-        outpost('X2', 3000, 'p2', 0, { position: { x: 3000, y: 500 } }),
-      ],
-      subs: [
-        { id: 'sub-1', owner: 'p1', from: 'X1', to: 'Q', drillers: 5, specialists: [], launchedAt: 0, arrivesAt: TICK, isGift: false },
-        { id: 'sub-2', owner: 'p2', from: 'X2', to: 'A', drillers: 5, specialists: [], launchedAt: 0, arrivesAt: TICK, isGift: false },
-      ],
-      nextId: 3,
-    });
-    const { state, events } = advance(s, [], 3 * TICK);
+  it('ends in a draw when the last players go out in the same tick', () => {
+    // Both resign in the same tick, which is the same rule as both losing
+    // their Queens at once. (Two Queens can't fall at once any more: a
+    // captured Queen becomes the captor's Princess, and she may then succeed
+    // her new owner's lost Queen.)
+    const orders: Order[] = [
+      { kind: 'resign', at: TICK, player: 'p1' },
+      { kind: 'resign', at: TICK, player: 'p2' },
+    ];
+    const { state, events } = advance(makeState(), orders, 3 * TICK);
     expect(state.players.every((p) => p.eliminated)).toBe(true);
     expect(state).toMatchObject({ winner: null, endedAt: TICK });
     expect(events).toContainEqual({ kind: 'gameDrawn', at: TICK, reason: 'eliminated' });
@@ -409,7 +415,7 @@ describe('resign', () => {
   });
 
   it("skips an eliminated player's later orders without any event", () => {
-    const s = makeState({ players: [...makeState().players, { id: 'p3', name: 'Three', neptunium: 0, minesDrilled: 0, eliminated: false }] });
+    const s = makeState({ players: [...makeState().players, { id: 'p3', name: 'Three', neptunium: 0, minesDrilled: 0, eliminated: false, hiring: inertHiring() }] });
     s.outposts.push(outpost('Z', 6000, 'p3', 10));
     s.specialists.push({ id: 'q3', kind: 'queen', owner: 'p3', location: { outpost: 'Z' }, captiveOf: null });
     const orders: Order[] = [

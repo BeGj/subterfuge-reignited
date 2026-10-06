@@ -449,7 +449,18 @@ export function eventVisibleTo(event: GameEvent, player: PlayerId): boolean {
       return event.order.player === player;
     case 'subLaunched':
     case 'subArrived':
+    case 'subRedirected':
       return event.owner === player;
+    case 'specialistOffered': // the offer is the player's own business
+      return event.player === player;
+    case 'specialistHired':
+    case 'specialistPromoted':
+    case 'queenSucceeded': // they show up on the map, so everyone sees them
+      return true;
+    case 'specialistCaptured':
+      return event.by === player || event.owners.includes(player);
+    case 'specialistDestroyed':
+      return event.owners.includes(player);
     case 'outpostCaptured':
       return event.from === player || event.to === player;
     case 'combat':

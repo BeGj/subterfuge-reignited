@@ -1,5 +1,11 @@
 import { Component, computed, input, output } from '@angular/core';
-import { NEPTUNIUM_TO_WIN, electricalOutput, type PlayerView } from '@subterfuge/engine';
+import {
+  NEPTUNIUM_TO_WIN,
+  electricalOutput,
+  outpostOfSpec,
+  specialistName,
+  type PlayerView,
+} from '@subterfuge/engine';
 import { minutesToNextProduction } from '../clock';
 import { playerColor } from '../colors';
 import { namesFor } from '../describe';
@@ -56,6 +62,17 @@ import { isSelected, type Selection } from '../selection';
       flex-wrap: wrap;
       gap: 6px;
     }
+    .specialists {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 12px;
+    }
+    .specialists li {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
     .outposts button,
     .subs button {
       padding: 4px 10px;
@@ -92,6 +109,24 @@ export class StatusPanel {
       .outposts.filter((o) => o.owner === this.view().you)
       .map((o) => ({ ...o, selected: isSelected(this.selection(), 'outpost', o.id) })),
   );
+
+  /** Your specialists and where they are: an outpost, a sub, or a prison. */
+  protected readonly mySpecialists = computed(() => {
+    const view = this.view();
+    const names = namesFor(view);
+    return view.specialists
+      .filter((s) => s.owner === view.you)
+      .map((s) => {
+        const at = outpostOfSpec(s);
+        let where: string;
+        if (s.captiveOf !== null) {
+          where = at === null ? 'a prisoner' : `prisoner at ${names.outpost(at)}`;
+        } else {
+          where = at === null ? 'at sea' : names.outpost(at);
+        }
+        return { id: s.id, name: specialistName(s.kind), where };
+      });
+  });
 
   /** Your subs in flight, soonest arrival first. */
   protected readonly mySubs = computed(() => {
